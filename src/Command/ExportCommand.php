@@ -16,7 +16,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'export', description: 'Export a deployment package from a source environment')]
 final class ExportCommand extends DropsCommand
 {
-
     protected function configure(): void
     {
         parent::configure();

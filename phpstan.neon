@@ -3,3 +3,5 @@ parameters:
     paths:
         - src
     tmpDir: .phpstan-cache
+    parallel:
+        maximumNumberOfProcesses: 1

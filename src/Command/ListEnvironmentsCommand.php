@@ -11,7 +11,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'list:environments', description: 'List all configured environments')]
 final class ListEnvironmentsCommand extends DropsCommand
 {
-
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $loader = $this->getConfigLoader($input);

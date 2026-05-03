@@ -11,7 +11,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'list:applications', description: 'List all configured applications with their enabled steps')]
 final class ListApplicationsCommand extends DropsCommand
 {
-
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $loader = $this->getConfigLoader($input);

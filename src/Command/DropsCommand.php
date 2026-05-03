@@ -23,7 +23,13 @@ abstract class DropsCommand extends Command
 
     protected function configure(): void
     {
-        $this->addOption('config-dir', null, InputOption::VALUE_REQUIRED, 'Path to config directory', $this->getDefaultConfigDir());
+        $this->addOption(
+            'config-dir',
+            null,
+            InputOption::VALUE_REQUIRED,
+            'Path to config directory',
+            $this->getDefaultConfigDir(),
+        );
     }
 
     protected function getConfigLoader(InputInterface $input): ConfigLoader
