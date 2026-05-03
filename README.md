@@ -308,15 +308,256 @@ drops list:applications
 
 ## Custom steps
 
-Create a PHP class implementing `Drops\Step\StepInterface`, place it anywhere autoloadable, and register it in `~/.drops/steps.php`:
+Custom steps extend DROPS with site-specific deployment logic. A custom step is a PHP class implementing `Drops\Step\StepInterface` with four methods:
+
+| Method | Returns | Purpose |
+|---|---|---|
+| `getId()` | `string` | Unique identifier used in application config |
+| `getLabel()` | `string` | Human-readable name shown in progress output |
+| `getPhase()` | `Phase` | When the step runs: `Phase::EXPORT`, `Phase::IMPORT`, or `Phase::BOTH` |
+| `run(DeployContext $context)` | `StepResult` | Execute the step; return success, failure, or skipped |
+
+The `DeployContext` passed to `run()` gives access to:
+
+- `$context->environment` — execute commands on the target via `execute()`, `upload()`, `download()`
+- `$context->appConfig` / `$context->envConfig` — full application and environment configuration
+- `$context->drushCommand('...')` — build a Drush command with the correct path
+- `$context->getStepConfig('step_id')` — read step-specific config from the application YAML
+- `$context->output` — Symfony Console output for logging
+- `$context->dryRun` — whether this is a dry run
+
+### Example: Cache warming step
+
+This step runs after import to warm Drupal's caches by requesting key URLs:
 
 ```php
+<?php
+// src/Steps/WarmCacheStep.php
+
+declare(strict_types=1);
+
+namespace MyCompany\Drops\Steps;
+
+use Drops\Pipeline\DeployContext;
+use Drops\Pipeline\StepResult;
+use Drops\Step\Phase;
+use Drops\Step\StepInterface;
+
+final class WarmCacheStep implements StepInterface
+{
+    public function getId(): string
+    {
+        return 'warm_cache';
+    }
+
+    public function getLabel(): string
+    {
+        return 'Warm caches';
+    }
+
+    public function getPhase(): Phase
+    {
+        return Phase::IMPORT;
+    }
+
+    public function run(DeployContext $context): StepResult
+    {
+        if ($context->dryRun) {
+            return StepResult::skipped('Dry run');
+        }
+
+        $config = $context->getStepConfig('warm_cache');
+        $urls = $config['urls'] ?? ['/'];
+        $concurrency = $config['concurrency'] ?? 3;
+        $log = [];
+
+        // Use Drush to get the site's base URL
+        $result = $context->environment->execute(
+            $context->drushCommand('browse --no-browser')
+        );
+
+        if (!$result->isSuccessful()) {
+            return StepResult::failed('Could not determine site URL', [$result->getErrorOutput()]);
+        }
+
+        $baseUrl = rtrim(trim($result->getOutput()), '/');
+        $log[] = sprintf('Base URL: %s', $baseUrl);
+        $log[] = sprintf('Warming %d URLs (concurrency: %d)...', count($urls), $concurrency);
+
+        // Build a curl command that requests all URLs
+        $curlArgs = [];
+        foreach ($urls as $url) {
+            $fullUrl = $baseUrl . '/' . ltrim($url, '/');
+            $curlArgs[] = sprintf('-o /dev/null -s -w "%%{http_code} %s\n" %s',
+                $fullUrl,
+                escapeshellarg($fullUrl),
+            );
+        }
+
+        $command = sprintf(
+            'curl --parallel --parallel-max %d %s',
+            $concurrency,
+            implode(' ', $curlArgs),
+        );
+
+        $curlResult = $context->environment->execute($command);
+        if ($curlResult->getOutput() !== '') {
+            $log[] = $curlResult->getOutput();
+        }
+
+        $log[] = 'Cache warming complete';
+
+        return StepResult::success($log);
+    }
+}
+```
+
+Application config for this step:
+
+```yaml
+# In your application YAML
+steps:
+  warm_cache: true
+
+step_config:
+  warm_cache:
+    concurrency: 5
+    urls:
+      - /
+      - /about
+      - /products
+      - /contact
+      - /sitemap.xml
+```
+
+### Example: Slack notification step
+
+This step sends a Slack message after import completes, reporting the application, environment, and deployment timestamp:
+
+```php
+<?php
+// src/Steps/NotifySlackStep.php
+
+declare(strict_types=1);
+
+namespace MyCompany\Drops\Steps;
+
+use Drops\Pipeline\DeployContext;
+use Drops\Pipeline\StepResult;
+use Drops\Step\Phase;
+use Drops\Step\StepInterface;
+
+final class NotifySlackStep implements StepInterface
+{
+    public function getId(): string
+    {
+        return 'notify_slack';
+    }
+
+    public function getLabel(): string
+    {
+        return 'Notify Slack';
+    }
+
+    public function getPhase(): Phase
+    {
+        return Phase::IMPORT;
+    }
+
+    public function run(DeployContext $context): StepResult
+    {
+        if ($context->dryRun) {
+            return StepResult::skipped('Dry run');
+        }
+
+        $config = $context->getStepConfig('notify_slack');
+        $webhookEnvVar = $config['webhook_env_var'] ?? 'SLACK_WEBHOOK_URL';
+        $channel = $config['channel'] ?? null;
+
+        // Read the webhook URL from an environment variable (never from config files)
+        $webhookUrl = $context->envConfig->envVars[$webhookEnvVar] ?? null;
+
+        if ($webhookUrl === null) {
+            return StepResult::skipped(
+                sprintf('No %s set in environment config env_vars', $webhookEnvVar)
+            );
+        }
+
+        $appLabel = $context->appConfig->label ?? $context->appConfig->id;
+        $envLabel = $context->envConfig->label ?? $context->envConfig->id;
+        $timestamp = date('Y-m-d H:i:s T');
+
+        $payload = [
+            'text' => sprintf(
+                "✅ *%s* deployed to *%s*\n_%s_",
+                $appLabel,
+                $envLabel,
+                $timestamp,
+            ),
+        ];
+
+        if ($channel !== null) {
+            $payload['channel'] = $channel;
+        }
+
+        $jsonPayload = json_encode($payload, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+
+        $command = sprintf(
+            'curl -s -X POST %s -H %s -d %s',
+            escapeshellarg($webhookUrl),
+            escapeshellarg('Content-type: application/json'),
+            escapeshellarg($jsonPayload),
+        );
+
+        $result = $context->environment->execute($command);
+
+        if (!$result->isSuccessful()) {
+            // Notification failure shouldn't break the deployment
+            $context->output->writeln(
+                sprintf('<comment>Slack notification failed: %s</comment>', $result->getErrorOutput())
+            );
+            return StepResult::success(['Slack notification failed (non-fatal)']);
+        }
+
+        return StepResult::success([sprintf('Slack notification sent to %s', $envLabel)]);
+    }
+}
+```
+
+Application and environment config for this step:
+
+```yaml
+# In your application YAML
+steps:
+  notify_slack: true
+
+step_config:
+  notify_slack:
+    webhook_env_var: SLACK_WEBHOOK_URL   # Name of the env_var holding the URL
+    channel: "#deployments"              # Optional: override default channel
+```
+
+```yaml
+# In your environment YAML — the webhook URL is kept here, not in app config
+env_vars:
+  APP_ENV: production
+  SLACK_WEBHOOK_URL: https://hooks.slack.com/services/T00000/B00000/XXXXXXXX
+```
+
+### Registering custom steps
+
+Place your step classes anywhere autoloadable and register them in `~/.drops/steps.php`:
+
+```php
+<?php
 // ~/.drops/steps.php
 return [
     MyCompany\Drops\Steps\WarmCacheStep::class,
     MyCompany\Drops\Steps\NotifySlackStep::class,
 ];
 ```
+
+Custom steps are referenced in application configs by their ID (the string returned by `getId()`), exactly like built-in steps. They run after all built-in steps in their phase.
 
 ## Hook scripts
 
