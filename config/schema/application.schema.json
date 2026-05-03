@@ -1,0 +1,118 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "DROPS Application Configuration",
+    "type": "object",
+    "required": ["id", "steps"],
+    "properties": {
+        "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$",
+            "description": "Unique identifier for the application"
+        },
+        "label": {
+            "type": "string",
+            "description": "Human-readable name"
+        },
+        "steps": {
+            "type": "object",
+            "properties": {
+                "pre_hooks": { "type": "boolean" },
+                "maintenance_on": { "type": "boolean" },
+                "database_export": { "type": "boolean" },
+                "files_export": { "type": "boolean" },
+                "config_export": { "type": "boolean" },
+                "config_import": { "type": "boolean" },
+                "files_import": { "type": "boolean" },
+                "database_import": { "type": "boolean" },
+                "database_update": { "type": "boolean" },
+                "cache_rebuild": { "type": "boolean" },
+                "maintenance_off": { "type": "boolean" },
+                "post_hooks": { "type": "boolean" }
+            },
+            "additionalProperties": { "type": "boolean" }
+        },
+        "step_config": {
+            "type": "object",
+            "properties": {
+                "database_export": {
+                    "type": "object",
+                    "properties": {
+                        "skip_data_tables": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        }
+                    }
+                },
+                "config_export": {
+                    "type": "object",
+                    "properties": {
+                        "sync_dir": { "type": "string" }
+                    }
+                },
+                "config_import": {
+                    "type": "object",
+                    "properties": {
+                        "sync_dir": { "type": "string" }
+                    }
+                },
+                "files_export": {
+                    "type": "object",
+                    "properties": {
+                        "directories": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        },
+                        "exclude": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        }
+                    }
+                },
+                "files_import": {
+                    "type": "object",
+                    "properties": {
+                        "directories": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        },
+                        "delete_removed": { "type": "boolean" }
+                    }
+                },
+                "pre_hooks": {
+                    "type": "object",
+                    "properties": {
+                        "export_scripts": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        },
+                        "import_scripts": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        }
+                    }
+                },
+                "post_hooks": {
+                    "type": "object",
+                    "properties": {
+                        "export_scripts": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        },
+                        "import_scripts": {
+                            "type": "array",
+                            "items": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        },
+        "import_options": {
+            "type": "object",
+            "properties": {
+                "create_rollback_package": { "type": "boolean" },
+                "rollback_package_dir": { "type": "string" }
+            }
+        }
+    },
+    "additionalProperties": false
+}

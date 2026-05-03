@@ -1,0 +1,28 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Find the Composer autoloader
+$autoloadPaths = [
+    __DIR__ . '/../vendor/autoload.php',           // Installed as project
+    __DIR__ . '/../../../autoload.php',             // Installed as dependency
+];
+
+$autoloader = null;
+foreach ($autoloadPaths as $path) {
+    if (file_exists($path)) {
+        $autoloader = require $path;
+        break;
+    }
+}
+
+if ($autoloader === null) {
+    fwrite(STDERR, "Could not find Composer autoloader. Run 'composer install' first.\n");
+    exit(1);
+}
+
+use Drops\Application;
+
+$application = new Application();
+$application->run();

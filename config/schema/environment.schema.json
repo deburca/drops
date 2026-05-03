@@ -1,0 +1,83 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "DROPS Environment Configuration",
+    "type": "object",
+    "required": ["id", "access", "paths"],
+    "properties": {
+        "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$",
+            "description": "Unique identifier for the environment"
+        },
+        "label": {
+            "type": "string",
+            "description": "Human-readable name"
+        },
+        "access": {
+            "type": "object",
+            "required": ["type"],
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["local", "ssh"],
+                    "description": "Access strategy"
+                },
+                "host": {
+                    "type": "string",
+                    "description": "SSH hostname or IP"
+                },
+                "port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "default": 22,
+                    "description": "SSH port"
+                },
+                "user": {
+                    "type": "string",
+                    "description": "SSH username"
+                },
+                "identity_file": {
+                    "type": "string",
+                    "description": "Path to SSH private key"
+                }
+            },
+            "if": {
+                "properties": { "type": { "const": "ssh" } }
+            },
+            "then": {
+                "required": ["host", "user"]
+            }
+        },
+        "paths": {
+            "type": "object",
+            "required": ["webroot"],
+            "properties": {
+                "webroot": {
+                    "type": "string",
+                    "description": "Absolute path to Drupal webroot"
+                },
+                "drush": {
+                    "type": "string",
+                    "description": "Path to Drush executable"
+                },
+                "php": {
+                    "type": "string",
+                    "description": "Path to PHP binary"
+                },
+                "temp": {
+                    "type": "string",
+                    "description": "Temp directory for staging files"
+                }
+            }
+        },
+        "env_vars": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            },
+            "description": "Extra environment variables for hook scripts"
+        }
+    },
+    "additionalProperties": false
+}
