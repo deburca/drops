@@ -9,6 +9,9 @@ final class EnvironmentConfig
     /**
      * @param array<string, string> $envVars
      */
+    /**
+     * @param ?string $exec Command prefix for containerised environments (e.g. "ddev exec -p myproject")
+     */
     public function __construct(
         public readonly string $id,
         public readonly string $accessType,
@@ -18,6 +21,7 @@ final class EnvironmentConfig
         public readonly int $port = 22,
         public readonly ?string $user = null,
         public readonly ?string $identityFile = null,
+        public readonly ?string $exec = null,
         public readonly ?string $drush = null,
         public readonly ?string $php = null,
         public readonly ?string $temp = null,
@@ -44,6 +48,7 @@ final class EnvironmentConfig
             port: (int) ($access['port'] ?? 22),
             user: $access['user'] ?? null,
             identityFile: $access['identity_file'] ?? null,
+            exec: $access['exec'] ?? null,
             drush: $paths['drush'] ?? null,
             php: $paths['php'] ?? null,
             temp: $paths['temp'] ?? null,

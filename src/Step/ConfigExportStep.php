@@ -47,23 +47,37 @@ final class ConfigExportStep implements StepInterface
             );
         }
 
-        // Copy exported config into the package
+        // Copy exported config into the package.
+        // Use tar to stream files — works for both direct and containerised environments
+        // since the output is captured on the host side.
         $configSourcePath = $context->envConfig->webroot . '/' . $syncDir;
         $packageConfigDir = $context->packageBuilder->getConfigDir();
 
-        $rsyncCmd = sprintf(
-            'rsync -a %s %s',
-            escapeshellarg($configSourcePath . '/'),
-            escapeshellarg($packageConfigDir . '/'),
-        );
-
+        $tarCmd = sprintf('tar -cf - -C %s .', escapeshellarg($configSourcePath));
         $log[] = 'Copying config files to package...';
-        $copyResult = $context->environment->execute($rsyncCmd);
+        $tarResult = $context->environment->execute($tarCmd);
 
-        if (!$copyResult->isSuccessful()) {
+        if (!$tarResult->isSuccessful()) {
             return StepResult::failed(
-                sprintf('Failed to copy config files (exit code %d)', $copyResult->exitCode),
-                array_merge($log, [$copyResult->getErrorOutput()]),
+                sprintf('Failed to read config files (exit code %d)', $tarResult->exitCode),
+                array_merge($log, [$tarResult->getErrorOutput()]),
+            );
+        }
+
+        // Extract the tar stream into the package config directory on the host
+        $tarFile = sys_get_temp_dir() . '/drops-config-' . uniqid() . '.tar';
+        file_put_contents($tarFile, $tarResult->getOutput());
+
+        $extractProcess = new \Symfony\Component\Process\Process(
+            ['tar', '-xf', $tarFile, '-C', $packageConfigDir]
+        );
+        $extractProcess->run();
+        @unlink($tarFile);
+
+        if (!$extractProcess->isSuccessful()) {
+            return StepResult::failed(
+                'Failed to extract config files to package',
+                array_merge($log, [$extractProcess->getErrorOutput()]),
             );
         }
 

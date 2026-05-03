@@ -23,7 +23,22 @@ final class LocalEnvironment implements EnvironmentInterface
     {
         $allEnvVars = array_merge($this->config->envVars, $envVars);
 
-        $process = Process::fromShellCommandline($command, $this->config->webroot, $allEnvVars);
+        if ($this->config->exec !== null) {
+            // Containerised environment (DDEV, Lando, etc.)
+            // Build env prefix for inside the container
+            $envPrefix = '';
+            foreach ($allEnvVars as $key => $value) {
+                $envPrefix .= sprintf('export %s=%s; ', $key, escapeshellarg($value));
+            }
+
+            $innerCommand = sprintf('cd %s && %s%s', escapeshellarg($this->config->webroot), $envPrefix, $command);
+            $fullCommand = sprintf('%s bash -c %s', $this->config->exec, escapeshellarg($innerCommand));
+
+            $process = Process::fromShellCommandline($fullCommand);
+        } else {
+            $process = Process::fromShellCommandline($command, $this->config->webroot, $allEnvVars);
+        }
+
         $process->setTimeout(null);
         $process->run();
 
@@ -56,6 +71,12 @@ final class LocalEnvironment implements EnvironmentInterface
 
     public function exists(string $path): bool
     {
+        if ($this->config->exec !== null) {
+            // Check inside the container
+            $result = $this->execute(sprintf('test -e %s && echo EXISTS || echo MISSING', escapeshellarg($path)));
+            return trim($result->getOutput()) === 'EXISTS';
+        }
+
         return $this->filesystem->exists($path);
     }
 
