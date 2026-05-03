@@ -1,84 +1,350 @@
 # DROPS — Drupal Remote Operations and Pipeline System
 
-A PHP command-line tool for deploying Drupal websites between environments. Built on Symfony Console, distributed as a Composer package.
+A PHP command-line tool for deploying Drupal websites between environments. Built on [Symfony Console](https://symfony.com/doc/current/components/console.html), distributed as a Composer package, and designed to align naturally with the Drupal developer ecosystem.
+
+DROPS models a deployment as a two-phase operation:
+
+1. **Export** — run on the source environment to produce a portable deployment package (`.tar.gz`)
+2. **Import** — run on the target environment to apply the deployment package
+
+The package can be transferred by any means (scp, SFTP, S3, shared NFS, etc.).
 
 ## Requirements
 
-- PHP 8.2+
-- PHP extensions: `json`, `phar`, `zlib`
-- System tools: `rsync`, `gzip`
+| Requirement | Version / Details |
+|---|---|
+| PHP | 8.2 or higher |
+| PHP extensions | `json`, `phar`, `zlib` |
+| System tools | `rsync` (file transfer steps), `gzip` (database dump compression) |
+| SSH | SSH agent or key file on the machine running DROPS (for remote environments) |
 
 ## Installation
+
+### Option 1: Global Composer install (recommended for Drupal developers)
 
 ```bash
 composer global require drops/drops
 ```
 
+This adds `drops` to `~/.composer/vendor/bin/drops`. Ensure that directory is on your `$PATH`:
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc:
+export PATH="$HOME/.composer/vendor/bin:$PATH"
+```
+
+### Option 2: Clone and symlink
+
+```bash
+git clone https://github.com/deburca/drops.git
+cd drops
+composer install
+ln -s "$(pwd)/bin/drops" /usr/local/bin/drops
+```
+
+### Option 3: Project-local install
+
+```bash
+composer require drops/drops
+./vendor/bin/drops --version
+```
+
+### Verify installation
+
+```bash
+drops --version
+# DROPS — Drupal Remote Operations and Pipeline System 1.0.0
+```
+
 ## Configuration
 
-Configuration lives in `~/.drops/` (or specify with `--config-dir`):
+All configuration lives in a single directory (default: `~/.drops/`, override with `--config-dir`). Configuration files are written in YAML.
+
+### Directory layout
 
 ```
 ~/.drops/
 ├── environments/
 │   ├── production.yml
-│   └── staging.yml
-└── applications/
-    └── acme-corp.yml
+│   ├── staging.yml
+│   └── local-dev.yml
+├── applications/
+│   ├── acme-corp.yml
+│   └── staff-intranet.yml
+└── steps.php              # Optional: register custom steps
 ```
 
-### Environment example
+Create the directory structure:
+
+```bash
+mkdir -p ~/.drops/environments ~/.drops/applications
+```
+
+### Environment configuration
+
+Each environment describes *how* to reach a machine and *where* the Drupal site lives.
+
+**SSH environment:**
 
 ```yaml
+# ~/.drops/environments/production.yml
 id: production
 label: "Production Server"
+
 access:
   type: ssh
   host: prod.example.com
+  port: 22
   user: deploy
+  identity_file: ~/.ssh/id_ed25519   # Optional; omit to use SSH agent
+
 paths:
   webroot: /var/www/drupal/web
+  drush: /var/www/drupal/vendor/bin/drush
+  php: /usr/bin/php8.2
+  temp: /tmp/drops
+
+env_vars:
+  APP_ENV: production
 ```
 
-### Application example
+**Local environment:**
 
 ```yaml
+# ~/.drops/environments/local-dev.yml
+id: local-dev
+label: "Local Development"
+
+access:
+  type: local
+
+paths:
+  webroot: /home/alice/projects/acme/web
+  drush: /home/alice/projects/acme/vendor/bin/drush
+```
+
+### Application configuration
+
+Each application defines a Drupal site and which deployment steps it requires.
+
+**Full example (all steps enabled):**
+
+```yaml
+# ~/.drops/applications/acme-corp.yml
 id: acme-corp
 label: "ACME Corp Website"
+
 steps:
+  pre_hooks: true
+  maintenance_on: true
   database_export: true
+  files_export: true
   config_export: true
   config_import: true
+  files_import: true
+  database_import: true
   database_update: true
   cache_rebuild: true
+  maintenance_off: true
+  post_hooks: true
+
+step_config:
+  database_export:
+    skip_data_tables:
+      - cache
+      - cache_*
+      - watchdog
+      - sessions
+
+  config_export:
+    sync_dir: ../config/sync
+
+  config_import:
+    sync_dir: ../config/sync
+
+  files_export:
+    directories:
+      - files/public
+    exclude:
+      - "*.log"
+      - ".DS_Store"
+      - "styles/"
+
+  files_import:
+    directories:
+      - files/public
+    delete_removed: false
+
+  pre_hooks:
+    export_scripts:
+      - hooks/pre-export.sh
+    import_scripts:
+      - hooks/pre-import.sh
+
+  post_hooks:
+    export_scripts:
+      - hooks/post-export.sh
+    import_scripts:
+      - hooks/post-import.sh
+
+import_options:
+  create_rollback_package: true
+  rollback_package_dir: /var/backups/drops/
+```
+
+**Minimal example (cache and database updates only):**
+
+```yaml
+# ~/.drops/applications/staff-intranet.yml
+id: staff-intranet
+label: "Staff Intranet"
+
+steps:
+  pre_hooks: false
+  maintenance_on: true
+  database_export: false
+  files_export: false
+  config_export: false
+  config_import: false
+  files_import: false
+  database_import: false
+  database_update: true
+  cache_rebuild: true
+  maintenance_off: true
+  post_hooks: false
 ```
 
 ## Usage
 
+### Verify connectivity
+
 ```bash
-# Export a deployment package
-drops export --app=acme-corp --env=production --output=./deploy.tar.gz
-
-# Import a deployment package
-drops import --app=acme-corp --env=staging --package=./deploy.tar.gz
-
-# Test connectivity
 drops ping --env=production
+```
 
-# Validate configs
+### Validate configuration
+
+```bash
 drops validate --all
+drops validate --app=acme-corp --env=production
+```
 
-# List environments/applications
+### Export a deployment package
+
+```bash
+drops export \
+  --app=acme-corp \
+  --env=production \
+  --output=./packages/acme-$(date +%Y%m%d-%H%M%S).tar.gz
+```
+
+### Import a deployment package
+
+```bash
+drops import \
+  --app=acme-corp \
+  --env=staging \
+  --package=./packages/acme-20250503-141500.tar.gz
+```
+
+### Dry run
+
+```bash
+drops import \
+  --app=acme-corp \
+  --env=production \
+  --package=./deploy.tar.gz \
+  --dry-run
+```
+
+### Override steps at runtime
+
+```bash
+# Run only specific steps
+drops import --app=acme-corp --env=staging \
+  --package=./deploy.tar.gz \
+  --steps=database_update,cache_rebuild
+
+# Skip specific steps
+drops export --app=acme-corp --env=production \
+  --output=./deploy.tar.gz \
+  --skip-steps=files_export
+```
+
+### List resources
+
+```bash
 drops list:environments
 drops list:applications
 ```
 
+## Global options
+
+```
+--config-dir=PATH    Path to config directory (default: ~/.drops)
+--dry-run            Print what would happen without executing
+--continue-on-error  Continue running steps after a failure
+--no-ansi            Disable terminal colour output
+--help               Show help for a command
+--version            Show DROPS version
+```
+
+## Built-in deployment steps
+
+| Step | Phase | Description |
+|---|---|---|
+| `pre_hooks` | Both | Run user-defined scripts before all other steps |
+| `maintenance_on` | Import | Enable Drupal maintenance mode |
+| `database_export` | Export | Dump the source database to the package |
+| `files_export` | Export | Archive file assets from the source |
+| `config_export` | Export | Run `drush config:export` and capture output |
+| `config_import` | Import | Run `drush config:import` from the package |
+| `files_import` | Import | Restore file assets from the package |
+| `database_import` | Import | Restore the database dump to the target |
+| `database_update` | Import | Run `drush updatedb` on the target |
+| `cache_rebuild` | Import | Run `drush cache:rebuild` on the target |
+| `maintenance_off` | Import | Disable Drupal maintenance mode |
+| `post_hooks` | Both | Run user-defined scripts after all other steps |
+
+## Custom steps
+
+Create a PHP class implementing `Drops\Step\StepInterface`, place it anywhere autoloadable, and register it in `~/.drops/steps.php`:
+
+```php
+// ~/.drops/steps.php
+return [
+    MyCompany\Drops\Steps\WarmCacheStep::class,
+    MyCompany\Drops\Steps\NotifySlackStep::class,
+];
+```
+
+## Hook scripts
+
+Hook scripts receive these environment variables:
+
+| Variable | Description |
+|---|---|
+| `DROPS_APP_ID` | Application ID |
+| `DROPS_ENV_ID` | Environment ID |
+| `DROPS_PHASE` | `export` or `import` |
+| `DROPS_WEBROOT` | Absolute path to the Drupal webroot |
+| `DROPS_PACKAGE_DIR` | Path to the deployment package directory |
+| `DROPS_DRUSH` | Path to the Drush executable |
+
+Any `env_vars` from the environment config are also exported. Scripts must exit `0` to indicate success.
+
 ## Development
 
 ```bash
+git clone https://github.com/deburca/drops.git
+cd drops
 composer install
-vendor/bin/phpunit          # Run tests
-vendor/bin/phpstan analyse  # Static analysis
+
+# Run tests
+vendor/bin/phpunit
+
+# Static analysis (PHPStan level 8)
+vendor/bin/phpstan analyse
 ```
 
 ## License
