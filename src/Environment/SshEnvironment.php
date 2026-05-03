@@ -5,16 +5,18 @@ declare(strict_types=1);
 namespace Drops\Environment;
 
 use Drops\Config\EnvironmentConfig;
-use phpseclib3\Net\SSH2;
-use phpseclib3\Net\SFTP;
-use phpseclib3\Crypt\PublicKeyLoader;
+use Symfony\Component\Process\Process;
 use RuntimeException;
 
+/**
+ * SSH environment using the native system SSH client via Symfony Process.
+ *
+ * This approach respects ~/.ssh/config, the macOS Keychain SSH agent,
+ * host key verification, ProxyJump, and all other SSH features the user
+ * has configured on their system.
+ */
 final class SshEnvironment implements EnvironmentInterface
 {
-    private ?SSH2 $ssh = null;
-    private ?SFTP $sftp = null;
-
     public function __construct(
         private readonly EnvironmentConfig $config,
     ) {
@@ -22,66 +24,76 @@ final class SshEnvironment implements EnvironmentInterface
 
     public function execute(string $command, array $envVars = []): CommandResult
     {
-        $ssh = $this->getSshConnection();
         $allEnvVars = array_merge($this->config->envVars, $envVars);
 
-        // Build env prefix for the command
+        // Build env prefix for the remote command
         $envPrefix = '';
         foreach ($allEnvVars as $key => $value) {
             $envPrefix .= sprintf('export %s=%s; ', $key, escapeshellarg($value));
         }
 
-        $fullCommand = sprintf('cd %s && %s%s', escapeshellarg($this->config->webroot), $envPrefix, $command);
+        $remoteCommand = sprintf('cd %s && %s%s', escapeshellarg($this->config->webroot), $envPrefix, $command);
 
-        // phpseclib exec returns output directly; stderr is captured separately
-        $stdout = $ssh->exec($fullCommand);
-        $stderr = $ssh->getStdError();
-        $exitCode = $ssh->getExitStatus();
+        $sshArgs = $this->buildSshArgs();
+        $sshArgs[] = $remoteCommand;
 
-        if ($stdout === false) {
-            $stdout = '';
-        }
+        $process = new Process($sshArgs);
+        $process->setTimeout(null);
+        $process->run();
 
         return new CommandResult(
-            exitCode: is_int($exitCode) ? $exitCode : 1,
-            stdout: $stdout,
-            stderr: $stderr,
+            exitCode: $process->getExitCode() ?? 1,
+            stdout: $process->getOutput(),
+            stderr: $process->getErrorOutput(),
         );
     }
 
     public function upload(string $localPath, string $remotePath): void
     {
-        $sftp = $this->getSftpConnection();
+        $target = sprintf('%s@%s:%s', $this->config->user, $this->config->host, $remotePath);
+        $args = $this->buildScpBaseArgs();
 
         if (is_dir($localPath)) {
-            $this->uploadDirectory($sftp, $localPath, $remotePath);
+            // Use rsync for directories
+            $rsyncArgs = $this->buildRsyncArgs($localPath . '/', $target . '/');
+            $this->runProcess($rsyncArgs, 'Upload directory failed');
         } else {
-            $sftp->put($remotePath, $localPath, SFTP::SOURCE_LOCAL_FILE);
+            $args[] = $localPath;
+            $args[] = $target;
+            $this->runProcess($args, 'Upload file failed');
         }
     }
 
     public function download(string $remotePath, string $localPath): void
     {
-        $sftp = $this->getSftpConnection();
+        $source = sprintf('%s@%s:%s', $this->config->user, $this->config->host, $remotePath);
+        $args = $this->buildScpBaseArgs();
 
-        $stat = $sftp->stat($remotePath);
-        if ($stat !== false && ($stat['type'] ?? 0) === 2) {
-            // Directory
-            $this->downloadDirectory($sftp, $remotePath, $localPath);
-        } else {
-            $dir = dirname($localPath);
-            if (!is_dir($dir)) {
-                mkdir($dir, 0755, true);
+        $dir = dirname($localPath);
+        if (!is_dir($dir)) {
+            mkdir($dir, 0755, true);
+        }
+
+        // Check if remote path is a directory
+        $checkResult = $this->execute(sprintf('test -d %s && echo DIR || echo FILE', escapeshellarg($remotePath)));
+        if (trim($checkResult->getOutput()) === 'DIR') {
+            if (!is_dir($localPath)) {
+                mkdir($localPath, 0755, true);
             }
-            $sftp->get($remotePath, $localPath);
+            $rsyncArgs = $this->buildRsyncArgs($source . '/', $localPath . '/');
+            $this->runProcess($rsyncArgs, 'Download directory failed');
+        } else {
+            $args[] = $source;
+            $args[] = $localPath;
+            $this->runProcess($args, 'Download file failed');
         }
     }
 
     public function exists(string $path): bool
     {
-        $sftp = $this->getSftpConnection();
+        $result = $this->execute(sprintf('test -e %s && echo EXISTS || echo MISSING', escapeshellarg($path)));
 
-        return $sftp->stat($path) !== false;
+        return trim($result->getOutput()) === 'EXISTS';
     }
 
     public function getConfig(): EnvironmentConfig
@@ -89,125 +101,98 @@ final class SshEnvironment implements EnvironmentInterface
         return $this->config;
     }
 
-    private function getSshConnection(): SSH2
+    /**
+     * Build the base SSH command arguments.
+     *
+     * @return string[]
+     */
+    private function buildSshArgs(): array
     {
-        if ($this->ssh !== null && $this->ssh->isConnected()) {
-            return $this->ssh;
-        }
+        $args = ['ssh'];
+        $args[] = '-o';
+        $args[] = 'BatchMode=yes';
 
-        $host = $this->config->host;
-        if ($host === null) {
-            throw new RuntimeException('SSH host is not configured');
-        }
-
-        $this->ssh = new SSH2($host, $this->config->port);
-        $this->authenticate($this->ssh);
-
-        return $this->ssh;
-    }
-
-    private function getSftpConnection(): SFTP
-    {
-        if ($this->sftp !== null && $this->sftp->isConnected()) {
-            return $this->sftp;
-        }
-
-        $host = $this->config->host;
-        if ($host === null) {
-            throw new RuntimeException('SSH host is not configured');
-        }
-
-        $this->sftp = new SFTP($host, $this->config->port);
-        $this->authenticate($this->sftp);
-
-        return $this->sftp;
-    }
-
-    private function authenticate(SSH2 $connection): void
-    {
-        $user = $this->config->user;
-        if ($user === null) {
-            throw new RuntimeException('SSH user is not configured');
+        if ($this->config->port !== 22) {
+            $args[] = '-p';
+            $args[] = (string) $this->config->port;
         }
 
         if ($this->config->identityFile !== null) {
-            $keyPath = $this->config->identityFile;
-            if (str_starts_with($keyPath, '~/')) {
-                $keyPath = ($_SERVER['HOME'] ?? getenv('HOME')) . substr($keyPath, 1);
-            }
-
-            if (!file_exists($keyPath)) {
-                throw new RuntimeException(sprintf('SSH identity file not found: %s', $keyPath));
-            }
-
-            $key = PublicKeyLoader::load(file_get_contents($keyPath));
-            if (!$connection->login($user, $key)) {
-                throw new RuntimeException(sprintf('SSH key authentication failed for %s@%s', $user, $this->config->host));
-            }
-        } else {
-            // Attempt agent-based authentication
-            if (!$connection->login($user)) {
-                throw new RuntimeException(sprintf('SSH agent authentication failed for %s@%s', $user, $this->config->host));
-            }
+            $keyPath = $this->resolveKeyPath($this->config->identityFile);
+            $args[] = '-i';
+            $args[] = $keyPath;
         }
+
+        $args[] = sprintf('%s@%s', $this->config->user, $this->config->host);
+
+        return $args;
     }
 
-    private function uploadDirectory(SFTP $sftp, string $localPath, string $remotePath): void
+    /**
+     * Build base scp arguments with port and identity file.
+     *
+     * @return string[]
+     */
+    private function buildScpBaseArgs(): array
     {
-        $sftp->mkdir($remotePath, 0755, true);
+        $args = ['scp', '-o', 'BatchMode=yes'];
 
-        $iterator = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($localPath, \FilesystemIterator::SKIP_DOTS),
-            \RecursiveIteratorIterator::SELF_FIRST,
-        );
-
-        foreach ($iterator as $item) {
-            $relativePath = substr($item->getPathname(), strlen($localPath));
-            $targetPath = $remotePath . $relativePath;
-
-            if ($item->isDir()) {
-                $sftp->mkdir($targetPath, 0755, true);
-            } else {
-                $sftp->put($targetPath, $item->getPathname(), SFTP::SOURCE_LOCAL_FILE);
-            }
+        if ($this->config->port !== 22) {
+            $args[] = '-P';
+            $args[] = (string) $this->config->port;
         }
+
+        if ($this->config->identityFile !== null) {
+            $keyPath = $this->resolveKeyPath($this->config->identityFile);
+            $args[] = '-i';
+            $args[] = $keyPath;
+        }
+
+        return $args;
     }
 
-    private function downloadDirectory(SFTP $sftp, string $remotePath, string $localPath): void
+    /**
+     * Build rsync-over-SSH arguments for directory transfers.
+     *
+     * @return string[]
+     */
+    private function buildRsyncArgs(string $source, string $dest): array
     {
-        if (!is_dir($localPath)) {
-            mkdir($localPath, 0755, true);
+        $sshCmd = 'ssh -o BatchMode=yes';
+        if ($this->config->port !== 22) {
+            $sshCmd .= sprintf(' -p %d', $this->config->port);
+        }
+        if ($this->config->identityFile !== null) {
+            $sshCmd .= sprintf(' -i %s', escapeshellarg($this->resolveKeyPath($this->config->identityFile)));
         }
 
-        $list = $sftp->nlist($remotePath);
-        if ($list === false) {
-            return;
-        }
-
-        foreach ($list as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-
-            $remoteItem = $remotePath . '/' . $entry;
-            $localItem = $localPath . '/' . $entry;
-
-            $stat = $sftp->stat($remoteItem);
-            if ($stat !== false && ($stat['type'] ?? 0) === 2) {
-                $this->downloadDirectory($sftp, $remoteItem, $localItem);
-            } else {
-                $sftp->get($remoteItem, $localItem);
-            }
-        }
+        return ['rsync', '-az', '-e', $sshCmd, $source, $dest];
     }
 
-    public function __destruct()
+    private function resolveKeyPath(string $keyPath): string
     {
-        if ($this->sftp !== null && $this->sftp->isConnected()) {
-            $this->sftp->disconnect();
+        if (str_starts_with($keyPath, '~/')) {
+            $keyPath = ($_SERVER['HOME'] ?? getenv('HOME')) . substr($keyPath, 1);
         }
-        if ($this->ssh !== null && $this->ssh->isConnected()) {
-            $this->ssh->disconnect();
+
+        return $keyPath;
+    }
+
+    /**
+     * @param string[] $args
+     */
+    private function runProcess(array $args, string $errorMessage): void
+    {
+        $process = new Process($args);
+        $process->setTimeout(null);
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            throw new RuntimeException(sprintf(
+                '%s: %s',
+                $errorMessage,
+                $process->getErrorOutput() ?: $process->getOutput(),
+            ));
         }
     }
 }
