@@ -34,17 +34,19 @@ final class DatabaseExportStep implements StepInterface
         $skipDataTables = $config['skip_data_tables'] ?? [];
 
         $log = [];
+        $dumpFile = $context->packageBuilder->getDatabaseDir() . '/dump.sql.gz';
 
-        // Build the drush sql:dump command
-        $dumpFile = $context->packageBuilder->getDatabaseDir() . '/dump.sql';
-        $command = $context->drushCommand('sql:dump --result-file=' . escapeshellarg($dumpFile));
+        // Build the drush sql:dump command — dump to stdout so it works
+        // in both direct and containerised (DDEV/Lando) environments
+        $command = $context->drushCommand('sql:dump');
 
         // Add structure-only tables
         foreach ($skipDataTables as $table) {
             $command .= ' --structure-tables-list=' . escapeshellarg($table);
         }
 
-        $command .= ' --gzip';
+        // Pipe through gzip; output goes to stdout
+        $command .= ' | gzip';
 
         $log[] = 'Running database export...';
         $result = $context->environment->execute($command);
@@ -56,18 +58,26 @@ final class DatabaseExportStep implements StepInterface
             );
         }
 
-        // The dump file will be dump.sql.gz after --gzip
-        $gzipPath = $dumpFile . '.gz';
-        if (file_exists($gzipPath)) {
-            $context->packageBuilder->addChecksum('database/dump.sql.gz', $gzipPath);
-            $log[] = sprintf('Database dumped to dump.sql.gz');
-        } elseif (file_exists($dumpFile)) {
-            $context->packageBuilder->addChecksum('database/dump.sql', $dumpFile);
-            $log[] = sprintf('Database dumped to dump.sql');
+        // Write the captured stdout (gzipped SQL) to the package directory on the host
+        if (file_put_contents($dumpFile, $result->getOutput()) === false) {
+            return StepResult::failed('Failed to write database dump to package');
         }
 
+        $context->packageBuilder->addChecksum('database/dump.sql.gz', $dumpFile);
         $context->packageBuilder->recordStep($this->getId());
+        $log[] = sprintf('Database dumped to dump.sql.gz (%s)', $this->formatBytes(filesize($dumpFile) ?: 0));
 
         return StepResult::success($log);
+    }
+
+    private function formatBytes(int $bytes): string
+    {
+        if ($bytes >= 1048576) {
+            return sprintf('%.1f MB', $bytes / 1048576);
+        }
+        if ($bytes >= 1024) {
+            return sprintf('%.1f KB', $bytes / 1024);
+        }
+        return sprintf('%d bytes', $bytes);
     }
 }

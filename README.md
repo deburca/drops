@@ -123,6 +123,44 @@ paths:
   drush: /home/alice/projects/acme/vendor/bin/drush
 ```
 
+**DDEV environment:**
+
+For DDEV projects, set `access.exec` to route all commands through the container. Use container paths for `webroot` and `drush`:
+
+```yaml
+# ~/.drops/environments/ddev-local.yml
+id: ddev-local
+label: "Local DDEV"
+
+access:
+  type: local
+  exec: ddev exec -p my-project     # All commands run inside the DDEV web container
+
+paths:
+  webroot: /var/www/html/web         # Container path (DDEV mounts project to /var/www/html)
+  drush: drush                       # Drush is on PATH inside the container
+  temp: /tmp/drops                   # Host path — package staging stays on the host
+```
+
+**Lando environment:**
+
+```yaml
+# ~/.drops/environments/lando-local.yml
+id: lando-local
+label: "Local Lando"
+
+access:
+  type: local
+  exec: lando ssh -c                 # All commands run inside the Lando appserver
+
+paths:
+  webroot: /app/web                  # Container path (Lando mounts project to /app)
+  drush: drush
+  temp: /tmp/drops
+```
+
+The `access.exec` option wraps all executed commands (Drush, database, hooks) with the given prefix so they run inside the container. File operations (upload/download) stay on the host since the project filesystem is volume-mounted.
+
 ### Application configuration
 
 Each application defines a Drupal site and which deployment steps it requires.

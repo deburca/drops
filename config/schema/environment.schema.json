@@ -40,6 +40,10 @@
                 "identity_file": {
                     "type": "string",
                     "description": "Path to SSH private key"
+                },
+                "exec": {
+                    "type": "string",
+                    "description": "Command prefix for containerised environments (e.g. ddev exec -p myproject, lando ssh -c)"
                 }
             },
             "if": {
