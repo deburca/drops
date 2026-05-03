@@ -8,8 +8,6 @@ final class EnvironmentConfig
 {
     /**
      * @param array<string, string> $envVars
-     */
-    /**
      * @param ?string $exec Command prefix for containerised environments (e.g. "ddev exec -p myproject")
      */
     public function __construct(

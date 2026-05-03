@@ -16,7 +16,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'import', description: 'Import a deployment package to a target environment')]
 final class ImportCommand extends DropsCommand
 {
-
     protected function configure(): void
     {
         parent::configure();
@@ -54,7 +53,12 @@ final class ImportCommand extends DropsCommand
         $extractDir = $envConfig->getTempDir() . '/drops-import-' . date('YmdHis');
         $reader->open($extractDir);
 
-        $output->writeln(sprintf('Package from: %s (%s)', $reader->getManifest()->sourceEnvironmentId, $reader->getManifest()->createdAt->format('Y-m-d H:i:s')));
+        $manifest = $reader->getManifest();
+        $output->writeln(sprintf(
+            'Package from: %s (%s)',
+            $manifest->sourceEnvironmentId,
+            $manifest->createdAt->format('Y-m-d H:i:s'),
+        ));
         $output->writeln('');
 
         // Apply step overrides

@@ -12,7 +12,6 @@ use Symfony\Component\Console\Output\OutputInterface;
 #[AsCommand(name: 'ping', description: 'Test connectivity to an environment and verify PHP and Drush are reachable')]
 final class PingCommand extends DropsCommand
 {
-
     protected function configure(): void
     {
         parent::configure();
@@ -25,14 +24,19 @@ final class PingCommand extends DropsCommand
         $envConfig = $this->resolveEnvironment($input);
         $environment = $this->createEnvironment($envConfig);
 
-        $output->writeln(sprintf('<info>Pinging %s</info> (%s)', $envConfig->label ?? $envConfig->id, $envConfig->accessType));
+        $output->writeln(sprintf(
+            '<info>Pinging %s</info> (%s)',
+            $envConfig->label ?? $envConfig->id,
+            $envConfig->accessType,
+        ));
         $output->writeln('');
 
         // Test PHP
         $output->write('  PHP: ');
         $phpResult = $environment->execute($envConfig->getPhpPath() . ' --version');
         if ($phpResult->isSuccessful()) {
-            $version = trim(explode("\n", $phpResult->getOutput())[0] ?? '');
+            $lines = explode("\n", $phpResult->getOutput());
+            $version = trim($lines[0]);
             $output->writeln(sprintf('<info>%s</info>', $version));
         } else {
             $output->writeln('<error>not reachable</error>');

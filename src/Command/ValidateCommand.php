@@ -13,7 +13,6 @@ use Symfony\Component\Yaml\Yaml;
 #[AsCommand(name: 'validate', description: 'Validate configuration files')]
 final class ValidateCommand extends DropsCommand
 {
-
     protected function configure(): void
     {
         parent::configure();
@@ -34,61 +33,41 @@ final class ValidateCommand extends DropsCommand
         $appId = $input->getOption('app');
         $envId = $input->getOption('env');
 
+        $configDir = $loader->getConfigDir();
+
         if ($validateAll) {
-            // Validate all environments
             foreach ($loader->loadAllEnvironments() as $envConfig) {
                 $output->write(sprintf('Environment "%s": ', $envConfig->id));
-                $result = $validator->validateEnvironment($this->loadRawConfig($loader->getConfigDir() . '/environments/' . $envConfig->id . '.yml'));
-                if ($result->isValid()) {
-                    $output->writeln('<info>valid</info>');
-                } else {
-                    $output->writeln('<error>invalid</error>');
-                    foreach ($result->errors as $error) {
-                        $output->writeln(sprintf('  - %s', $error));
-                    }
+                $path = $configDir . '/environments/' . $envConfig->id . '.yml';
+                $result = $validator->validateEnvironment($this->loadRawConfig($path));
+                if ($this->reportResult($result, $output)) {
                     $hasErrors = true;
                 }
             }
 
-            // Validate all applications
             foreach ($loader->loadAllApplications() as $appConfig) {
                 $output->write(sprintf('Application "%s": ', $appConfig->id));
-                $result = $validator->validateApplication($this->loadRawConfig($loader->getConfigDir() . '/applications/' . $appConfig->id . '.yml'));
-                if ($result->isValid()) {
-                    $output->writeln('<info>valid</info>');
-                } else {
-                    $output->writeln('<error>invalid</error>');
-                    foreach ($result->errors as $error) {
-                        $output->writeln(sprintf('  - %s', $error));
-                    }
+                $path = $configDir . '/applications/' . $appConfig->id . '.yml';
+                $result = $validator->validateApplication($this->loadRawConfig($path));
+                if ($this->reportResult($result, $output)) {
                     $hasErrors = true;
                 }
             }
         } else {
             if ($envId !== null) {
                 $output->write(sprintf('Environment "%s": ', $envId));
-                $result = $validator->validateEnvironment($this->loadRawConfig($loader->getConfigDir() . '/environments/' . $envId . '.yml'));
-                if ($result->isValid()) {
-                    $output->writeln('<info>valid</info>');
-                } else {
-                    $output->writeln('<error>invalid</error>');
-                    foreach ($result->errors as $error) {
-                        $output->writeln(sprintf('  - %s', $error));
-                    }
+                $path = $configDir . '/environments/' . $envId . '.yml';
+                $result = $validator->validateEnvironment($this->loadRawConfig($path));
+                if ($this->reportResult($result, $output)) {
                     $hasErrors = true;
                 }
             }
 
             if ($appId !== null) {
                 $output->write(sprintf('Application "%s": ', $appId));
-                $result = $validator->validateApplication($this->loadRawConfig($loader->getConfigDir() . '/applications/' . $appId . '.yml'));
-                if ($result->isValid()) {
-                    $output->writeln('<info>valid</info>');
-                } else {
-                    $output->writeln('<error>invalid</error>');
-                    foreach ($result->errors as $error) {
-                        $output->writeln(sprintf('  - %s', $error));
-                    }
+                $path = $configDir . '/applications/' . $appId . '.yml';
+                $result = $validator->validateApplication($this->loadRawConfig($path));
+                if ($this->reportResult($result, $output)) {
                     $hasErrors = true;
                 }
             }
@@ -100,6 +79,22 @@ final class ValidateCommand extends DropsCommand
         }
 
         return $hasErrors ? self::FAILURE : self::SUCCESS;
+    }
+
+    private function reportResult(
+        \Drops\Config\ValidationResult $result,
+        OutputInterface $output,
+    ): bool {
+        if ($result->isValid()) {
+            $output->writeln('<info>valid</info>');
+            return false;
+        }
+
+        $output->writeln('<error>invalid</error>');
+        foreach ($result->errors as $error) {
+            $output->writeln(sprintf('  - %s', $error));
+        }
+        return true;
     }
 
     /**
