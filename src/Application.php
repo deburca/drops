@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drops;
 
+use Composer\InstalledVersions;
 use Drops\Command\ExportCommand;
 use Drops\Command\ImportCommand;
 use Drops\Command\ListApplicationsCommand;
@@ -14,11 +15,12 @@ use Symfony\Component\Console\Application as ConsoleApplication;
 
 final class Application extends ConsoleApplication
 {
-    public const VERSION = '1.0.0';
+    public const VERSION = 'dev';
 
     public function __construct()
     {
-        parent::__construct('DROPS — Drupal Remote Operations and Pipeline System', self::VERSION);
+        $version = InstalledVersions::getPrettyVersion('drops/drops') ?? self::VERSION;
+        parent::__construct('DROPS — Drupal Remote Operations and Pipeline System', $version);
 
         $this->addCommands([
             new ExportCommand(),
