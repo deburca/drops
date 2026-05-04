@@ -39,7 +39,7 @@ final class FilesExportStep implements StepInterface
         $targetDir = $context->packageBuilder->getFilesDir();
 
         foreach ($directories as $dir) {
-            $sourcePath = $webroot . '/sites/default/' . $dir;
+            $sourcePath = $webroot . '/sites/' . $context->envConfig->getSiteDir() . '/' . $dir;
             $destPath = $targetDir . '/' . $dir;
 
             // Build rsync command

@@ -123,6 +123,48 @@ paths:
   drush: /home/alice/projects/acme/vendor/bin/drush
 ```
 
+**Multi-site environment:**
+
+For Drupal multi-site installs where multiple sites share a single codebase, add a `uri` field. This tells DROPS which site to target — Drush commands will include `--uri`, and file operations will use `sites/<uri>/` instead of `sites/default/`.
+
+Create one environment config per site:
+
+```yaml
+# ~/.drops/environments/production-site-a.yml
+id: production-site-a
+label: "Production — Site A"
+
+access:
+  type: ssh
+  host: prod.example.com
+  user: deploy
+
+paths:
+  webroot: /var/www/drupal/web
+  drush: /var/www/drupal/vendor/bin/drush
+
+uri: site-a.example.com
+```
+
+```yaml
+# ~/.drops/environments/production-site-b.yml
+id: production-site-b
+label: "Production — Site B"
+
+access:
+  type: ssh
+  host: prod.example.com
+  user: deploy
+
+paths:
+  webroot: /var/www/drupal/web
+  drush: /var/www/drupal/vendor/bin/drush
+
+uri: site-b.example.com
+```
+
+When `uri` is omitted, DROPS behaves as a standard single-site install (`sites/default/`).
+
 **DDEV environment:**
 
 For DDEV projects, set `access.exec` to route all commands through the container. Use container paths for `webroot` and `drush`:
@@ -609,6 +651,7 @@ Hook scripts receive these environment variables:
 | `DROPS_WEBROOT` | Absolute path to the Drupal webroot |
 | `DROPS_PACKAGE_DIR` | Path to the deployment package directory |
 | `DROPS_DRUSH` | Path to the Drush executable |
+| `DROPS_URI` | Drupal site URI (only set for multi-site environments) |
 
 Any `env_vars` from the environment config are also exported. Scripts must exit `0` to indicate success.
 

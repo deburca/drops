@@ -44,6 +44,10 @@ final class PostHooksStep implements StepInterface
             'DROPS_DRUSH' => $context->envConfig->getDrushPath(),
         ];
 
+        if ($context->envConfig->uri !== null) {
+            $hookEnvVars['DROPS_URI'] = $context->envConfig->uri;
+        }
+
         if ($context->packageBuilder !== null) {
             $hookEnvVars['DROPS_PACKAGE_DIR'] = $context->packageBuilder->getPackageDir();
         } elseif ($context->packageReader !== null) {

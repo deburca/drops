@@ -40,7 +40,7 @@ final class FilesImportStep implements StepInterface
 
         foreach ($directories as $dir) {
             $sourcePath = $packageFilesDir . '/' . $dir;
-            $destPath = $webroot . '/sites/default/' . $dir;
+            $destPath = $webroot . '/sites/' . $context->envConfig->getSiteDir() . '/' . $dir;
 
             $rsyncCmd = sprintf(
                 'rsync -a %s %s',

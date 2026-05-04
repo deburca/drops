@@ -75,6 +75,10 @@
                 }
             }
         },
+        "uri": {
+            "type": "string",
+            "description": "Drupal site URI for multi-site installs (e.g. site-a.example.com). When set, Drush commands include --uri and file operations target sites/<uri>/ instead of sites/default/."
+        },
         "env_vars": {
             "type": "object",
             "additionalProperties": {
