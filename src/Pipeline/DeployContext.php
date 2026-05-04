@@ -29,10 +29,19 @@ final class DeployContext
 
     /**
      * Get the Drush command prefix for this environment.
+     *
+     * When the environment has a URI configured (multi-site), --uri is
+     * appended so Drush targets the correct site.
      */
     public function drushCommand(string $subCommand): string
     {
-        return sprintf('%s %s', $this->envConfig->getDrushPath(), $subCommand);
+        $command = sprintf('%s %s', $this->envConfig->getDrushPath(), $subCommand);
+
+        if ($this->envConfig->uri !== null) {
+            $command .= ' --uri=' . escapeshellarg($this->envConfig->uri);
+        }
+
+        return $command;
     }
 
     /**

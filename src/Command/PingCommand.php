@@ -63,6 +63,19 @@ final class PingCommand extends DropsCommand
             return self::FAILURE;
         }
 
+        // Show URI if configured (multi-site)
+        if ($envConfig->uri !== null) {
+            $output->writeln(sprintf('  URI: <info>%s</info>', $envConfig->uri));
+            $output->write(sprintf('  Site dir: sites/%s/ ', $envConfig->getSiteDir()));
+            $siteDirPath = $envConfig->webroot . '/sites/' . $envConfig->getSiteDir();
+            if ($environment->exists($siteDirPath)) {
+                $output->writeln('<info>✓</info>');
+            } else {
+                $output->writeln('<error>(not found)</error>');
+                return self::FAILURE;
+            }
+        }
+
         $output->writeln('');
         $output->writeln('<info>All checks passed.</info>');
 

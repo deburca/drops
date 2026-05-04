@@ -66,4 +66,29 @@ final class EnvironmentConfigTest extends TestCase
         $this->assertSame('php', $config->getPhpPath());
         $this->assertSame(22, $config->port);
     }
+
+    public function testUriIsNullByDefault(): void
+    {
+        $config = EnvironmentConfig::fromArray([
+            'id' => 'local',
+            'access' => ['type' => 'local'],
+            'paths' => ['webroot' => '/var/www/html'],
+        ]);
+
+        $this->assertNull($config->uri);
+        $this->assertSame('default', $config->getSiteDir());
+    }
+
+    public function testFromArrayWithUri(): void
+    {
+        $config = EnvironmentConfig::fromArray([
+            'id' => 'production-site-a',
+            'access' => ['type' => 'ssh', 'host' => 'prod.example.com', 'user' => 'deploy'],
+            'paths' => ['webroot' => '/var/www/drupal/web'],
+            'uri' => 'site-a.example.com',
+        ]);
+
+        $this->assertSame('site-a.example.com', $config->uri);
+        $this->assertSame('site-a.example.com', $config->getSiteDir());
+    }
 }

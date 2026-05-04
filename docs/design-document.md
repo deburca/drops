@@ -456,6 +456,7 @@ Hook scripts are shell scripts executed at defined points in the deployment. The
 | `DROPS_WEBROOT` | Absolute path to the Drupal webroot on the current environment |
 | `DROPS_PACKAGE_DIR` | Path to the deployment package directory |
 | `DROPS_DRUSH` | Path to the Drush executable |
+| `DROPS_URI` | Drupal site URI (only set for multi-site environments) |
 
 Any `env_vars` defined in the environment config are also exported to the script.
 
@@ -759,6 +760,7 @@ mv drops.phar /usr/local/bin/drops
 | `paths.php` | No | string | Path to PHP binary |
 | `paths.temp` | No | string | Temp directory for staging files |
 | `env_vars` | No | map | Extra env vars for hook scripts |
+| `uri` | No | string | Drupal site URI for multi-site installs. Appends `--uri` to Drush commands and targets `sites/<uri>/` for file operations |
 
 ### Application Config Fields
 
@@ -787,7 +789,7 @@ The following items are noted as future extension points but are not part of the
 
 - **S3/cloud storage** as a package transport layer
 - **Slack/email notifications** (currently achievable via post-deployment hooks)
-- **Multi-site Drupal** (multiple `sites/` directories) — requires per-subsite step configuration
+- **Multi-site Drupal** — per-subsite step configuration (currently each site requires its own application config; a future `sites` list could allow one application to deploy across all subsites in a single run)
 - **Environment-to-environment streaming** — bypassing the two-phase model by piping export directly to import over SSH in a single invocation
 - **Web UI** for triggering deployments and viewing history
 - **Package signing** — GPG signatures on packages for verification in high-security environments

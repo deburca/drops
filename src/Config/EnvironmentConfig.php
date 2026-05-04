@@ -9,6 +9,7 @@ final class EnvironmentConfig
     /**
      * @param array<string, string> $envVars
      * @param ?string $exec Command prefix for containerised environments (e.g. "ddev exec -p myproject")
+     * @param ?string $uri Drupal site URI for multi-site installs (e.g. "site-a.example.com")
      */
     public function __construct(
         public readonly string $id,
@@ -24,6 +25,7 @@ final class EnvironmentConfig
         public readonly ?string $php = null,
         public readonly ?string $temp = null,
         public readonly array $envVars = [],
+        public readonly ?string $uri = null,
     ) {
     }
 
@@ -51,6 +53,7 @@ final class EnvironmentConfig
             php: $paths['php'] ?? null,
             temp: $paths['temp'] ?? null,
             envVars: $data['env_vars'] ?? [],
+            uri: $data['uri'] ?? null,
         );
     }
 
@@ -77,5 +80,21 @@ final class EnvironmentConfig
     public function getTempDir(): string
     {
         return $this->temp ?? sys_get_temp_dir() . '/drops';
+    }
+
+    /**
+     * Get the sites/ subdirectory name for this environment.
+     *
+     * In a Drupal multi-site install, each site lives under sites/<dir>/.
+     * Drupal resolves the directory from the request URI (via sites.php or
+     * directory naming conventions). For DROPS, we use the URI value
+     * directly as the directory name — this matches Drupal's default
+     * convention where sites/example.com/ maps to the URI example.com.
+     *
+     * Returns 'default' when no URI is configured (standard single-site).
+     */
+    public function getSiteDir(): string
+    {
+        return $this->uri ?? 'default';
     }
 }
