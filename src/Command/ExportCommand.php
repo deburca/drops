@@ -33,10 +33,12 @@ final class ExportCommand extends DropsCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $outputPath = $this->requireOption($input, 'output');
+        $this->requireDirectoryExists($outputPath, 'output');
+
         $appConfig = $this->resolveApplication($input);
         $envConfig = $this->resolveEnvironment($input);
         $environment = $this->createEnvironment($envConfig);
-        $outputPath = $input->getOption('output');
         $dryRun = $input->getOption('dry-run');
         $continueOnError = $input->getOption('continue-on-error');
 

@@ -32,10 +32,88 @@ abstract class DropsCommand extends Command
         );
     }
 
+    /**
+     * Get a required option value, throwing a clear error if it is missing.
+     *
+     * Symfony Console options marked as VALUE_REQUIRED only require a value
+     * when the flag is present — they do not enforce that the flag itself is
+     * provided. This helper fills that gap for options that are logically
+     * mandatory for a command to run.
+     */
+    protected function requireOption(InputInterface $input, string $name): string
+    {
+        $value = $input->getOption($name);
+
+        if ($value === null || $value === '') {
+            throw new \InvalidArgumentException(sprintf(
+                'The "--%s" option is required. See "%s --help" for usage.',
+                $name,
+                $this->getName(),
+            ));
+        }
+
+        return (string) $value;
+    }
+
+    /**
+     * Validate that a file path exists and is readable.
+     */
+    protected function requireFileExists(string $path, string $optionName): void
+    {
+        if (!file_exists($path)) {
+            throw new \InvalidArgumentException(sprintf(
+                'The file specified by "--%s" does not exist: %s',
+                $optionName,
+                $path,
+            ));
+        }
+
+        if (!is_readable($path)) {
+            throw new \InvalidArgumentException(sprintf(
+                'The file specified by "--%s" is not readable: %s',
+                $optionName,
+                $path,
+            ));
+        }
+    }
+
+    /**
+     * Validate that the parent directory of a path exists (for output files).
+     */
+    protected function requireDirectoryExists(string $path, string $optionName): void
+    {
+        $dir = dirname($path);
+
+        if (!is_dir($dir)) {
+            throw new \InvalidArgumentException(sprintf(
+                'The directory for "--%s" does not exist: %s',
+                $optionName,
+                $dir,
+            ));
+        }
+
+        if (!is_writable($dir)) {
+            throw new \InvalidArgumentException(sprintf(
+                'The directory for "--%s" is not writable: %s',
+                $optionName,
+                $dir,
+            ));
+        }
+    }
+
     protected function getConfigLoader(InputInterface $input): ConfigLoader
     {
         if ($this->configLoader === null) {
             $configDir = $input->getOption('config-dir');
+
+            if (!is_dir($configDir)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'Configuration directory does not exist: %s'
+                    . "\nCreate it or specify a different path with --config-dir.",
+                    $configDir,
+                ));
+            }
+
             $this->configLoader = new ConfigLoader($configDir);
         }
 
@@ -67,14 +145,14 @@ abstract class DropsCommand extends Command
 
     protected function resolveApplication(InputInterface $input): ApplicationConfig
     {
-        $appId = $input->getOption('app');
+        $appId = $this->requireOption($input, 'app');
 
         return $this->getConfigLoader($input)->loadApplication($appId);
     }
 
     protected function resolveEnvironment(InputInterface $input): EnvironmentConfig
     {
-        $envId = $input->getOption('env');
+        $envId = $this->requireOption($input, 'env');
 
         return $this->getConfigLoader($input)->loadEnvironment($envId);
     }
@@ -94,6 +172,12 @@ abstract class DropsCommand extends Command
     {
         $stepsOption = $input->getOption('steps') ?? null;
         $skipStepsOption = $input->getOption('skip-steps') ?? null;
+
+        if ($stepsOption !== null && $skipStepsOption !== null) {
+            throw new \InvalidArgumentException(
+                'The "--steps" and "--skip-steps" options are mutually exclusive. Use one or the other.',
+            );
+        }
 
         if ($stepsOption !== null) {
             return array_map('trim', explode(',', $stepsOption));
