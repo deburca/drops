@@ -33,10 +33,12 @@ final class ImportCommand extends DropsCommand
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
+        $packagePath = $this->requireOption($input, 'package');
+        $this->requireFileExists($packagePath, 'package');
+
         $appConfig = $this->resolveApplication($input);
         $envConfig = $this->resolveEnvironment($input);
         $environment = $this->createEnvironment($envConfig);
-        $packagePath = $input->getOption('package');
         $dryRun = $input->getOption('dry-run');
         $continueOnError = $input->getOption('continue-on-error');
         $noMaintenance = $input->getOption('no-maintenance');
