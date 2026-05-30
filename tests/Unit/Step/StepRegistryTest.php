@@ -77,4 +77,40 @@ final class StepRegistryTest extends TestCase
 
         $this->assertNull($this->registry->get('nonexistent'));
     }
+
+    public function testFreshImportStepsExcludeMaintenanceMode(): void
+    {
+        $freshSteps = $this->registry->getImportStepsForFreshInstall();
+        $ids = array_map(fn($s) => $s->getId(), $freshSteps);
+
+        $this->assertNotContains('maintenance_on', $ids);
+        $this->assertNotContains('maintenance_off', $ids);
+    }
+
+    public function testFreshImportStepsRunDatabaseBeforeConfig(): void
+    {
+        $freshSteps = $this->registry->getImportStepsForFreshInstall();
+        $ids = array_map(fn($s) => $s->getId(), $freshSteps);
+
+        $dbPos = array_search('database_import', $ids, true);
+        $configPos = array_search('config_import', $ids, true);
+
+        $this->assertNotFalse($dbPos, 'database_import must be present');
+        $this->assertNotFalse($configPos, 'config_import must be present');
+        $this->assertLessThan($configPos, $dbPos, 'database_import must run before config_import');
+    }
+
+    public function testFreshImportStepsContainExpectedSteps(): void
+    {
+        $freshSteps = $this->registry->getImportStepsForFreshInstall();
+        $ids = array_map(fn($s) => $s->getId(), $freshSteps);
+
+        $this->assertContains('pre_hooks', $ids);
+        $this->assertContains('database_import', $ids);
+        $this->assertContains('config_import', $ids);
+        $this->assertContains('files_import', $ids);
+        $this->assertContains('database_update', $ids);
+        $this->assertContains('cache_rebuild', $ids);
+        $this->assertContains('post_hooks', $ids);
+    }
 }

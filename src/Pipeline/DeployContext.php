@@ -22,6 +22,7 @@ final class DeployContext
         public readonly EnvironmentInterface $environment,
         public readonly OutputInterface $output,
         public readonly bool $dryRun = false,
+        public readonly bool $isFreshInstall = false,
         public readonly ?PackageBuilder $packageBuilder = null,
         public readonly ?PackageReader $packageReader = null,
     ) {

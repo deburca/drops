@@ -24,6 +24,20 @@ final class StepRegistry
         'post_hooks',
     ];
 
+    /**
+     * Step order for fresh installs: database first so Drupal can bootstrap,
+     * then config/files/updates. Maintenance mode is omitted (no running site).
+     */
+    private const STEP_ORDER_FRESH = [
+        'pre_hooks',
+        'database_import',
+        'config_import',
+        'files_import',
+        'database_update',
+        'cache_rebuild',
+        'post_hooks',
+    ];
+
     /** @var array<string, StepInterface> */
     private array $steps = [];
 
@@ -66,6 +80,23 @@ final class StepRegistry
     public function getImportSteps(): array
     {
         return $this->filterByPhase(fn(Phase $p) => $p->appliesToImport());
+    }
+
+    /**
+     * Get import steps reordered for a fresh/empty Drupal install.
+     *
+     * Database import runs first so Drupal can bootstrap, then config
+     * import, files, updates, and cache rebuild. Maintenance mode steps
+     * are excluded since there is no running site to protect.
+     *
+     * @return StepInterface[]
+     */
+    public function getImportStepsForFreshInstall(): array
+    {
+        return $this->filterByPhase(
+            fn(Phase $p) => $p->appliesToImport(),
+            self::STEP_ORDER_FRESH,
+        );
     }
 
     /**
@@ -126,22 +157,28 @@ final class StepRegistry
 
     /**
      * @param callable(Phase): bool $filter
+     * @param string[]|null $order Step order to use (defaults to STEP_ORDER)
      * @return StepInterface[]
      */
-    private function filterByPhase(callable $filter): array
+    private function filterByPhase(callable $filter, ?array $order = null): array
     {
+        $order ??= self::STEP_ORDER;
         $result = [];
 
         // Maintain the defined order for built-in steps
-        foreach (self::STEP_ORDER as $id) {
+        foreach ($order as $id) {
             if (isset($this->steps[$id]) && $filter($this->steps[$id]->getPhase())) {
                 $result[] = $this->steps[$id];
             }
         }
 
-        // Append any custom steps not in the built-in order
+        // Append any custom steps not in any built-in order
         foreach ($this->steps as $id => $step) {
-            if (!in_array($id, self::STEP_ORDER, true) && $filter($step->getPhase())) {
+            if (
+                !in_array($id, self::STEP_ORDER, true)
+                && !in_array($id, $order, true)
+                && $filter($step->getPhase())
+            ) {
                 $result[] = $step;
             }
         }
