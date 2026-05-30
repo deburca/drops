@@ -80,7 +80,8 @@ final class FilesImportStep implements StepInterface
             $privateFilesPath = $context->envConfig->getPrivateFilesPath();
 
             if ($privateFilesPath === null) {
-                $log[] = 'WARNING: Package contains private files but target has no paths.private_files configured — skipping';
+                $log[] = 'WARNING: Package contains private files but target has no'
+                    . ' paths.private_files configured — skipping';
             } else {
                 // Ensure target directory exists
                 $mkdirCmd = sprintf('mkdir -p %s', escapeshellarg($privateFilesPath));
