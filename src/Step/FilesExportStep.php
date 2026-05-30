@@ -42,19 +42,9 @@ final class FilesExportStep implements StepInterface
             $sourcePath = $webroot . '/sites/' . $context->envConfig->getSiteDir() . '/' . $dir;
             $destPath = $targetDir . '/' . $dir;
 
-            // Build rsync command
-            $rsyncCmd = sprintf(
-                'rsync -a %s %s',
-                escapeshellarg($sourcePath . '/'),
-                escapeshellarg($destPath . '/'),
-            );
-
-            foreach ($excludes as $exclude) {
-                $rsyncCmd .= ' --exclude=' . escapeshellarg($exclude);
-            }
+            $result = $this->exportDirectory($context, $sourcePath, $destPath, $excludes);
 
             $log[] = sprintf('Syncing: %s', $dir);
-            $result = $context->environment->execute($rsyncCmd);
 
             if (!$result->isSuccessful()) {
                 return StepResult::failed(
@@ -71,18 +61,14 @@ final class FilesExportStep implements StepInterface
         if ($privateFilesPath !== null) {
             $privateTargetDir = $context->packageBuilder->getPrivateFilesDir();
 
-            $rsyncCmd = sprintf(
-                'rsync -a %s %s',
-                escapeshellarg(rtrim($privateFilesPath, '/') . '/'),
-                escapeshellarg($privateTargetDir . '/'),
+            $result = $this->exportDirectory(
+                $context,
+                rtrim($privateFilesPath, '/'),
+                $privateTargetDir,
+                $excludes,
             );
 
-            foreach ($excludes as $exclude) {
-                $rsyncCmd .= ' --exclude=' . escapeshellarg($exclude);
-            }
-
             $log[] = 'Syncing: private files';
-            $result = $context->environment->execute($rsyncCmd);
 
             if (!$result->isSuccessful()) {
                 return StepResult::failed(
@@ -97,5 +83,55 @@ final class FilesExportStep implements StepInterface
         $context->packageBuilder->recordStep($this->getId());
 
         return StepResult::success($log);
+    }
+
+    /**
+     * Export a directory from the environment to a local destination.
+     *
+     * Uses tar streaming (like ConfigExportStep) so it works in both
+     * direct and containerised (DDEV/Lando) environments — rsync
+     * would fail when the destination path is on the host but the
+     * command runs inside a container.
+     *
+     * @param string[] $excludes Directory names to exclude
+     */
+    private function exportDirectory(
+        DeployContext $context,
+        string $sourcePath,
+        string $destPath,
+        array $excludes,
+    ): \Drops\Environment\CommandResult {
+        // Build tar command with exclusions — runs inside the environment
+        // Excludes must appear before the file list
+        $tarCmd = 'tar';
+        foreach ($excludes as $exclude) {
+            $tarCmd .= ' --exclude=' . escapeshellarg($exclude);
+        }
+        $tarCmd .= sprintf(' -cf - -C %s .', escapeshellarg($sourcePath));
+
+        $tarResult = $context->environment->execute($tarCmd);
+
+        if (!$tarResult->isSuccessful()) {
+            return $tarResult;
+        }
+
+        // Extract the tar stream into the destination directory on the host
+        $filesystem = new \Symfony\Component\Filesystem\Filesystem();
+        $filesystem->mkdir($destPath);
+
+        $tarFile = sys_get_temp_dir() . '/drops-files-' . uniqid() . '.tar';
+        file_put_contents($tarFile, $tarResult->getOutput());
+
+        $extractProcess = new \Symfony\Component\Process\Process(
+            ['tar', '-xf', $tarFile, '-C', $destPath],
+        );
+        $extractProcess->run();
+        @unlink($tarFile);
+
+        return new \Drops\Environment\CommandResult(
+            exitCode: $extractProcess->isSuccessful() ? 0 : ($extractProcess->getExitCode() ?? 1),
+            stdout: $extractProcess->getOutput(),
+            stderr: $extractProcess->getErrorOutput(),
+        );
     }
 }
