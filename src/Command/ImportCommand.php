@@ -29,7 +29,12 @@ final class ImportCommand extends DropsCommand
             ->addOption('no-maintenance', null, InputOption::VALUE_NONE, 'Skip maintenance mode')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Simulate without executing')
             ->addOption('continue-on-error', null, InputOption::VALUE_NONE, 'Continue on step failure')
-            ->addOption('fresh', null, InputOption::VALUE_NONE, 'Target is a fresh/empty Drupal install (imports database first)');
+            ->addOption(
+                'fresh',
+                null,
+                InputOption::VALUE_NONE,
+                'Target is a fresh/empty Drupal install (imports database first)',
+            );
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
