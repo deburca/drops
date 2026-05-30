@@ -13,6 +13,10 @@
             "type": "string",
             "description": "Human-readable name"
         },
+        "uri": {
+            "type": "string",
+            "description": "Drupal site URI for multi-site installs (e.g. site-a.example.com). Takes precedence over the environment-level URI."
+        },
         "steps": {
             "type": "object",
             "properties": {

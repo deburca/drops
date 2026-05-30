@@ -47,6 +47,24 @@ final class ImportPipeline
 
         $progress->start(count($this->steps));
 
+        // Register a shutdown handler to catch fatal errors that bypass
+        // normal exception handling (e.g. OOM, segfaults with display_errors=Off).
+        $lastStepId = null;
+        $pipelineOutput = $context->output;
+        register_shutdown_function(static function () use (&$lastStepId, $pipelineOutput): void {
+            $error = error_get_last();
+            if ($error !== null && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE], true)) {
+                $pipelineOutput->writeln('');
+                $pipelineOutput->writeln(sprintf(
+                    '<error>Fatal error after step "%s": %s in %s on line %d</error>',
+                    $lastStepId ?? '(unknown)',
+                    $error['message'],
+                    $error['file'],
+                    $error['line'],
+                ));
+            }
+        });
+
         foreach ($this->steps as $step) {
             $stepId = $step->getId();
 
@@ -56,7 +74,7 @@ final class ImportPipeline
                 continue;
             }
 
-            $progress->advance($step->getLabel(), StepStatus::RUNNING);
+            $progress->status($step->getLabel(), StepStatus::RUNNING);
 
             if ($context->dryRun) {
                 $results[$stepId] = StepResult::skipped('Dry run');
@@ -64,8 +82,21 @@ final class ImportPipeline
                 continue;
             }
 
-            $result = $step->run($context);
+            try {
+                $result = $step->run($context);
+            } catch (\Throwable $e) {
+                $context->output->writeln(sprintf(
+                    '<error>Uncaught %s in step "%s": %s</error>',
+                    get_class($e),
+                    $stepId,
+                    $e->getMessage(),
+                ));
+                $context->output->writeln(sprintf('  in %s:%d', $e->getFile(), $e->getLine()));
+                $result = StepResult::failed($e->getMessage());
+            }
+
             $results[$stepId] = $result;
+            $lastStepId = $stepId;
 
             $progress->advance($step->getLabel(), $result->status);
 

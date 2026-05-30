@@ -83,6 +83,7 @@ final class ImportCommand extends DropsCommand
                 stepConfig: $appConfig->stepConfig,
                 label: $appConfig->label,
                 importOptions: $appConfig->importOptions,
+                uri: $appConfig->uri,
             );
         }
 
@@ -97,6 +98,7 @@ final class ImportCommand extends DropsCommand
                 stepConfig: $appConfig->stepConfig,
                 label: $appConfig->label,
                 importOptions: $appConfig->importOptions,
+                uri: $appConfig->uri,
             );
         }
 

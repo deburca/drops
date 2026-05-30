@@ -45,40 +45,74 @@ final class DatabaseImportStep implements StepInterface
             return StepResult::failed('No database dump found in package');
         }
 
-        // Drop existing tables first
+        // Drop all existing tables using Drush's built-in command.
         $dropCommand = $context->drushCommand('sql:drop --yes');
+
         $log[] = 'Dropping existing database tables...';
         $dropResult = $context->environment->execute($dropCommand);
 
         if (!$dropResult->isSuccessful()) {
+            $errorDetail = trim($dropResult->getErrorOutput() ?: $dropResult->getOutput());
             return StepResult::failed(
-                sprintf('Failed to drop database tables (exit code %d)', $dropResult->exitCode),
-                array_merge($log, [$dropResult->getErrorOutput()]),
+                sprintf("Failed to drop database tables (exit code %d): %s", $dropResult->exitCode, $errorDetail),
+                array_merge($log, [$errorDetail]),
             );
         }
 
-        // Import the dump
+        // Get the raw MySQL connection command via drush sql:connect.
+        // Piping large dumps through drush sql:cli is unreliable; piping
+        // directly to the MySQL client avoids Drush's stdin handling issues.
+        $log[] = 'Resolving database connection...';
+        $connectResult = $context->environment->execute($context->drushCommand('sql:connect'));
+
+        if (!$connectResult->isSuccessful()) {
+            $errorDetail = trim($connectResult->getErrorOutput() ?: $connectResult->getOutput());
+            return StepResult::failed(
+                sprintf("Failed to resolve database connection (exit code %d): %s", $connectResult->exitCode, $errorDetail),
+                array_merge($log, [$errorDetail]),
+            );
+        }
+
+        // Append --binary-mode to disable backslash interpretation, which
+        // is required for reliably importing SQL dump files.
+        $mysqlCommand = trim($connectResult->getOutput()) . ' --binary-mode';
+
+        // Decompress the dump if needed, then import via file redirection
+        // rather than piping, for maximum compatibility.
+        $sqlFile = $dumpFile;
         if (str_ends_with($dumpFile, '.gz')) {
-            $command = sprintf(
-                'gunzip -c %s | %s',
-                escapeshellarg($dumpFile),
-                $context->drushCommand('sql:cli'),
+            $sqlFile = substr($dumpFile, 0, -3);
+            $log[] = 'Decompressing dump file...';
+            $decompressResult = $context->environment->execute(
+                sprintf('gunzip -f %s', escapeshellarg($dumpFile)),
             );
-        } else {
-            $command = sprintf(
-                '%s < %s',
-                $context->drushCommand('sql:cli'),
-                escapeshellarg($dumpFile),
-            );
+            if (!$decompressResult->isSuccessful()) {
+                $errorDetail = trim($decompressResult->getErrorOutput());
+                return StepResult::failed(
+                    sprintf("Failed to decompress dump file: %s", $errorDetail),
+                    array_merge($log, [$errorDetail]),
+                );
+            }
         }
 
+        // Strip all MariaDB 10.11+ sandbox mode directives.
+        // Newer mariadb-dump versions emit /*M!999999\- enable the sandbox mode */
+        // lines throughout the dump, which older clients choke on due to \-.
+        $context->environment->execute(
+            sprintf("sed -i '/\/\*M!999999/d' %s", escapeshellarg($sqlFile)),
+        );
+
+        $command = sprintf('%s < %s', $mysqlCommand, escapeshellarg($sqlFile));
+
+        $log[] = sprintf('MySQL command: %s', $mysqlCommand);
         $log[] = 'Importing database dump...';
         $result = $context->environment->execute($command);
 
         if (!$result->isSuccessful()) {
+            $errorDetail = trim($result->getErrorOutput() ?: $result->getOutput());
             return StepResult::failed(
-                sprintf('Database import failed (exit code %d)', $result->exitCode),
-                array_merge($log, [$result->getErrorOutput()]),
+                sprintf("Database import failed (exit code %d): %s", $result->exitCode, $errorDetail),
+                array_merge($log, [$errorDetail]),
             );
         }
 
