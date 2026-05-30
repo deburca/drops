@@ -244,15 +244,14 @@ step_config:
 
   files_export:
     directories:
-      - files/public
+      - files
     exclude:
       - "*.log"
       - ".DS_Store"
-      - "styles/"
 
   files_import:
     directories:
-      - files/public
+      - files
     delete_removed: false
 
   pre_hooks:

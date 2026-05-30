@@ -31,7 +31,7 @@ final class FilesImportStep implements StepInterface
         }
 
         $config = $context->getStepConfig('files_import');
-        $directories = $config['directories'] ?? ['files/public'];
+        $directories = $config['directories'] ?? ['files'];
         $deleteRemoved = $config['delete_removed'] ?? false;
 
         $log = [];
@@ -41,6 +41,17 @@ final class FilesImportStep implements StepInterface
         foreach ($directories as $dir) {
             $sourcePath = $packageFilesDir . '/' . $dir;
             $destPath = $webroot . '/sites/' . $context->envConfig->getSiteDir() . '/' . $dir;
+
+            // Ensure target directory exists (may not on a new environment)
+            $mkdirCmd = sprintf('mkdir -p %s', escapeshellarg($destPath));
+            $mkdirResult = $context->environment->execute($mkdirCmd);
+
+            if (!$mkdirResult->isSuccessful()) {
+                return StepResult::failed(
+                    sprintf('Failed to create directory %s (exit code %d)', $dir, $mkdirResult->exitCode),
+                    array_merge($log, [$mkdirResult->getErrorOutput()]),
+                );
+            }
 
             $rsyncCmd = sprintf(
                 'rsync -a %s %s',
