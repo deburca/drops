@@ -68,7 +68,11 @@ final class DatabaseImportStep implements StepInterface
         if (!$connectResult->isSuccessful()) {
             $errorDetail = trim($connectResult->getErrorOutput() ?: $connectResult->getOutput());
             return StepResult::failed(
-                sprintf("Failed to resolve database connection (exit code %d): %s", $connectResult->exitCode, $errorDetail),
+                sprintf(
+                    "Failed to resolve database connection (exit code %d): %s",
+                    $connectResult->exitCode,
+                    $errorDetail,
+                ),
                 array_merge($log, [$errorDetail]),
             );
         }

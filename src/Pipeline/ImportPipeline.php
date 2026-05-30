@@ -49,7 +49,7 @@ final class ImportPipeline
 
         // Register a shutdown handler to catch fatal errors that bypass
         // normal exception handling (e.g. OOM, segfaults with display_errors=Off).
-        $lastStepId = null;
+        $lastStepId = '(unknown)';
         $pipelineOutput = $context->output;
         register_shutdown_function(static function () use (&$lastStepId, $pipelineOutput): void {
             $error = error_get_last();
@@ -57,7 +57,7 @@ final class ImportPipeline
                 $pipelineOutput->writeln('');
                 $pipelineOutput->writeln(sprintf(
                     '<error>Fatal error after step "%s": %s in %s on line %d</error>',
-                    $lastStepId ?? '(unknown)',
+                    $lastStepId,
                     $error['message'],
                     $error['file'],
                     $error['line'],

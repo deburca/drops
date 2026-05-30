@@ -17,7 +17,8 @@ final class DeployContextTest extends TestCase
     {
         $context = $this->createContext(uri: null, drush: '/usr/bin/drush');
 
-        $this->assertSame("/usr/bin/drush --root='/var/www/html' cache:rebuild", $context->drushCommand('cache:rebuild'));
+        $expected = "/usr/bin/drush --root='/var/www/html' cache:rebuild";
+        $this->assertSame($expected, $context->drushCommand('cache:rebuild'));
     }
 
     public function testDrushCommandWithUri(): void
