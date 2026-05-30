@@ -38,9 +38,34 @@ final class FilesImportStep implements StepInterface
         $webroot = $context->envConfig->webroot;
         $packageFilesDir = $context->packageReader->getFilesDir();
 
+        // Resolve the actual public files path from Drupal's settings.php
+        // rather than guessing from the URI, since sites.php or custom
+        // settings may place files in a non-default directory.
+        $statusResult = $context->environment->execute(
+            $context->drushCommand('status --field=files --format=string'),
+        );
+
+        if (!$statusResult->isSuccessful() || trim($statusResult->getOutput()) === '') {
+            return StepResult::failed(
+                'Could not determine public files path from Drupal (drush status --field=files failed)',
+                $log,
+            );
+        }
+
+        $drupalFilesPath = trim($statusResult->getOutput());
+        $log[] = sprintf('Drupal public files path: %s', $drupalFilesPath);
+
         foreach ($directories as $dir) {
             $sourcePath = $packageFilesDir . '/' . $dir;
-            $destPath = $webroot . '/sites/' . $context->envConfig->getSiteDir() . '/' . $dir;
+
+            // Use the Drupal-reported files path as the base when syncing
+            // the default 'files' directory; other directories are resolved
+            // relative to the site directory that contains the files path.
+            if ($dir === 'files') {
+                $destPath = $webroot . '/' . $drupalFilesPath;
+            } else {
+                $destPath = dirname($webroot . '/' . $drupalFilesPath) . '/' . $dir;
+            }
 
             // Ensure target directory exists (may not on a new environment)
             $mkdirCmd = sprintf('mkdir -p %s', escapeshellarg($destPath));

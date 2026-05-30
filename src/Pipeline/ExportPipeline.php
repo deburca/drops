@@ -44,7 +44,7 @@ final class ExportPipeline
                 continue;
             }
 
-            $progress->advance($step->getLabel(), StepStatus::RUNNING);
+            $progress->status($step->getLabel(), StepStatus::RUNNING);
 
             if ($context->dryRun) {
                 $results[$stepId] = StepResult::skipped('Dry run');

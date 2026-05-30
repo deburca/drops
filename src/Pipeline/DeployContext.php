@@ -36,13 +36,23 @@ final class DeployContext
      */
     public function drushCommand(string $subCommand): string
     {
-        $command = sprintf('%s %s', $this->envConfig->getDrushPath(), $subCommand);
+        $parts = [
+            $this->envConfig->getDrushPath(),
+            '--root=' . escapeshellarg($this->envConfig->webroot),
+        ];
 
-        if ($this->envConfig->uri !== null) {
-            $command .= ' --uri=' . escapeshellarg($this->envConfig->uri);
+        // Application-level URI takes precedence over environment-level URI,
+        // allowing multi-site deployments where each app targets a different site.
+        // Placed before the sub-command so Drush resolves the correct site
+        // configuration during bootstrap.
+        $uri = $this->appConfig->uri ?? $this->envConfig->uri;
+        if ($uri !== null) {
+            $parts[] = '--uri=' . escapeshellarg($uri);
         }
 
-        return $command;
+        $parts[] = $subCommand;
+
+        return implode(' ', $parts);
     }
 
     /**

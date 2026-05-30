@@ -23,9 +23,28 @@ final class StepProgressRenderer
         $this->current = 0;
     }
 
+    /**
+     * Display a status line without advancing the step counter.
+     *
+     * Use this to show a transient status (e.g. RUNNING) before a step
+     * completes. The counter stays at the current value.
+     */
+    public function status(string $label, StepStatus $status): void
+    {
+        $this->renderLine($label, $status, $this->current + 1);
+    }
+
+    /**
+     * Advance the step counter and display the result status.
+     */
     public function advance(string $label, StepStatus $status): void
     {
         $this->current++;
+        $this->renderLine($label, $status, $this->current);
+    }
+
+    private function renderLine(string $label, StepStatus $status, int $step): void
+    {
         $statusIcon = match ($status) {
             StepStatus::RUNNING => '<comment>⏳</comment>',
             StepStatus::COMPLETE => '<info>✓</info>',
@@ -37,7 +56,7 @@ final class StepProgressRenderer
         $this->output->writeln(sprintf(
             '  %s [%d/%d] %s',
             $statusIcon,
-            $this->current,
+            $step,
             $this->total,
             $label,
         ));

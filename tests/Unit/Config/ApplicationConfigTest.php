@@ -37,7 +37,7 @@ final class ApplicationConfigTest extends TestCase
         $this->assertTrue($config->isStepEnabled('database_export'));
         $this->assertTrue($config->isStepEnabled('config_export'));
         $this->assertFalse($config->isStepEnabled('files_export'));
-        $this->assertFalse($config->isStepEnabled('nonexistent'));
+        $this->assertTrue($config->isStepEnabled('nonexistent'), 'Unlisted steps default to enabled');
     }
 
     public function testGetEnabledSteps(): void

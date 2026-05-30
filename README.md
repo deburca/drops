@@ -208,7 +208,9 @@ The `access.exec` option wraps all executed commands (Drush, database, hooks) wi
 
 Each application defines a Drupal site and which deployment steps it requires.
 
-**Full example (all steps enabled):**
+Steps not listed in the configuration are **enabled by default**. You only need to explicitly list steps you want to disable (`false`). This keeps application configs concise — most sites can omit the `steps` section entirely and get a full deployment pipeline.
+
+**Full example (with selective step disabling):**
 
 ```yaml
 # ~/.drops/applications/acme-corp.yml
@@ -216,18 +218,8 @@ id: acme-corp
 label: "ACME Corp Website"
 
 steps:
-  pre_hooks: true
-  maintenance_on: true
-  database_export: true
-  files_export: true
-  config_export: true
-  config_import: true
-  files_import: true
-  database_import: true
-  database_update: true
-  cache_rebuild: true
-  maintenance_off: true
-  post_hooks: true
+  pre_hooks: false          # Only list steps you want to disable
+  post_hooks: false
 
 step_config:
   database_export:
@@ -272,7 +264,18 @@ import_options:
   rollback_package_dir: /var/backups/drops/
 ```
 
-**Minimal example (cache and database updates only):**
+**Multi-site application:**
+
+For multi-site installs, you can set a `uri` on the application config. This takes precedence over the environment-level `uri`, allowing a single environment config to serve multiple applications that each target a different site:
+
+```yaml
+# ~/.drops/applications/site-a.yml
+id: site-a
+label: "Site A"
+uri: site-a.example.com      # Overrides environment-level URI
+```
+
+**Minimal example (database updates and cache rebuild only):**
 
 ```yaml
 # ~/.drops/applications/staff-intranet.yml
@@ -281,17 +284,15 @@ label: "Staff Intranet"
 
 steps:
   pre_hooks: false
-  maintenance_on: true
+  maintenance_on: false
   database_export: false
   files_export: false
   config_export: false
   config_import: false
   files_import: false
   database_import: false
-  database_update: true
-  cache_rebuild: true
-  maintenance_off: true
   post_hooks: false
+  # database_update, cache_rebuild, and maintenance_off remain enabled by default
 ```
 
 ## Usage
@@ -378,9 +379,9 @@ drops list:applications
 | `database_export` | Export | Dump the source database to the package |
 | `files_export` | Export | Archive file assets from the source |
 | `config_export` | Export | Run `drush config:export` and capture output |
+| `database_import` | Import | Restore the database dump to the target |
 | `config_import` | Import | Run `drush config:import` from the package |
 | `files_import` | Import | Restore file assets from the package |
-| `database_import` | Import | Restore the database dump to the target |
 | `database_update` | Import | Run `drush updatedb` on the target |
 | `cache_rebuild` | Import | Run `drush cache:rebuild` on the target |
 | `maintenance_off` | Import | Disable Drupal maintenance mode |
@@ -651,7 +652,7 @@ Hook scripts receive these environment variables:
 | `DROPS_WEBROOT` | Absolute path to the Drupal webroot |
 | `DROPS_PACKAGE_DIR` | Path to the deployment package directory |
 | `DROPS_DRUSH` | Path to the Drush executable |
-| `DROPS_URI` | Drupal site URI (only set for multi-site environments) |
+| `DROPS_URI` | Drupal site URI — application-level URI takes precedence over the environment-level URI (only set for multi-site installs) |
 
 Any `env_vars` from the environment config are also exported. Scripts must exit `0` to indicate success.
 
