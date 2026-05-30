@@ -63,6 +63,52 @@ final class FilesImportStep implements StepInterface
             }
         }
 
+        // Import private files if the package contains them
+        $privateFilesDir = $context->packageReader->getPrivateFilesDir();
+        if (is_dir($privateFilesDir) && !$this->isEmptyDir($privateFilesDir)) {
+            $privateFilesPath = $context->envConfig->getPrivateFilesPath();
+
+            if ($privateFilesPath === null) {
+                $log[] = 'WARNING: Package contains private files but target has no paths.private_files configured — skipping';
+            } else {
+                // Ensure target directory exists
+                $mkdirCmd = sprintf('mkdir -p %s', escapeshellarg($privateFilesPath));
+                $mkdirResult = $context->environment->execute($mkdirCmd);
+
+                if (!$mkdirResult->isSuccessful()) {
+                    return StepResult::failed(
+                        sprintf('Failed to create private files directory (exit code %d)', $mkdirResult->exitCode),
+                        array_merge($log, [$mkdirResult->getErrorOutput()]),
+                    );
+                }
+
+                $rsyncCmd = sprintf(
+                    'rsync -a %s %s',
+                    escapeshellarg($privateFilesDir . '/'),
+                    escapeshellarg(rtrim($privateFilesPath, '/') . '/'),
+                );
+
+                if ($deleteRemoved) {
+                    $rsyncCmd .= ' --delete';
+                }
+
+                $log[] = 'Syncing: private files';
+                $result = $context->environment->execute($rsyncCmd);
+
+                if (!$result->isSuccessful()) {
+                    return StepResult::failed(
+                        sprintf('Private file import failed (exit code %d)', $result->exitCode),
+                        array_merge($log, [$result->getErrorOutput()]),
+                    );
+                }
+            }
+        }
+
         return StepResult::success($log);
+    }
+
+    private function isEmptyDir(string $path): bool
+    {
+        return count(array_diff(scandir($path) ?: [], ['.', '..'])) === 0;
     }
 }

@@ -65,6 +65,35 @@ final class FilesExportStep implements StepInterface
         }
 
         $context->packageBuilder->addChecksumForDirectory('files');
+
+        // Export private files if configured
+        $privateFilesPath = $context->envConfig->getPrivateFilesPath();
+        if ($privateFilesPath !== null) {
+            $privateTargetDir = $context->packageBuilder->getPrivateFilesDir();
+
+            $rsyncCmd = sprintf(
+                'rsync -a %s %s',
+                escapeshellarg(rtrim($privateFilesPath, '/') . '/'),
+                escapeshellarg($privateTargetDir . '/'),
+            );
+
+            foreach ($excludes as $exclude) {
+                $rsyncCmd .= ' --exclude=' . escapeshellarg($exclude);
+            }
+
+            $log[] = 'Syncing: private files';
+            $result = $context->environment->execute($rsyncCmd);
+
+            if (!$result->isSuccessful()) {
+                return StepResult::failed(
+                    sprintf('Private file export failed (exit code %d)', $result->exitCode),
+                    array_merge($log, [$result->getErrorOutput()]),
+                );
+            }
+
+            $context->packageBuilder->addChecksumForDirectory('files-private');
+        }
+
         $context->packageBuilder->recordStep($this->getId());
 
         return StepResult::success($log);

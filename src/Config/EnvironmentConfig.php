@@ -24,6 +24,7 @@ final class EnvironmentConfig
         public readonly ?string $drush = null,
         public readonly ?string $php = null,
         public readonly ?string $temp = null,
+        public readonly ?string $privateFiles = null,
         public readonly array $envVars = [],
         public readonly ?string $uri = null,
     ) {
@@ -52,6 +53,7 @@ final class EnvironmentConfig
             drush: $paths['drush'] ?? null,
             php: $paths['php'] ?? null,
             temp: $paths['temp'] ?? null,
+            privateFiles: $paths['private_files'] ?? null,
             envVars: $data['env_vars'] ?? [],
             uri: $data['uri'] ?? null,
         );
@@ -80,6 +82,14 @@ final class EnvironmentConfig
     public function getTempDir(): string
     {
         return $this->temp ?? sys_get_temp_dir() . '/drops';
+    }
+
+    /**
+     * Get the absolute path to the private file system, or null if not configured.
+     */
+    public function getPrivateFilesPath(): ?string
+    {
+        return $this->privateFiles;
     }
 
     /**
