@@ -28,7 +28,8 @@ final class ImportCommand extends DropsCommand
             ->addOption('skip-steps', null, InputOption::VALUE_OPTIONAL, 'Steps to skip')
             ->addOption('no-maintenance', null, InputOption::VALUE_NONE, 'Skip maintenance mode')
             ->addOption('dry-run', null, InputOption::VALUE_NONE, 'Simulate without executing')
-            ->addOption('continue-on-error', null, InputOption::VALUE_NONE, 'Continue on step failure');
+            ->addOption('continue-on-error', null, InputOption::VALUE_NONE, 'Continue on step failure')
+            ->addOption('fresh', null, InputOption::VALUE_NONE, 'Target is a fresh/empty Drupal install (imports database first)');
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -42,6 +43,7 @@ final class ImportCommand extends DropsCommand
         $dryRun = $input->getOption('dry-run');
         $continueOnError = $input->getOption('continue-on-error');
         $noMaintenance = $input->getOption('no-maintenance');
+        $fresh = $input->getOption('fresh');
 
         $output->writeln(sprintf(
             '<info>DROPS Import</info> — %s to %s',
@@ -79,8 +81,8 @@ final class ImportCommand extends DropsCommand
             );
         }
 
-        // Handle --no-maintenance
-        if ($noMaintenance) {
+        // Handle --no-maintenance or --fresh (fresh installs have no running site)
+        if ($noMaintenance || $fresh) {
             $steps = $appConfig->steps;
             $steps['maintenance_on'] = false;
             $steps['maintenance_off'] = false;
@@ -94,7 +96,10 @@ final class ImportCommand extends DropsCommand
         }
 
         $registry = $this->getStepRegistry($input);
-        $pipeline = new ImportPipeline($registry->getImportSteps());
+        $importSteps = $fresh
+            ? $registry->getImportStepsForFreshInstall()
+            : $registry->getImportSteps();
+        $pipeline = new ImportPipeline($importSteps);
 
         $context = new DeployContext(
             appConfig: $appConfig,
@@ -102,6 +107,7 @@ final class ImportCommand extends DropsCommand
             environment: $environment,
             output: $output,
             dryRun: $dryRun,
+            isFreshInstall: $fresh,
             packageReader: $reader,
         );
 

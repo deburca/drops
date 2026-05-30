@@ -36,7 +36,21 @@ final class DeployContextTest extends TestCase
         $this->assertSame($expected, $context->drushCommand('updatedb --yes'));
     }
 
-    private function createContext(?string $uri, ?string $drush): DeployContext
+    public function testIsFreshInstallDefaultsToFalse(): void
+    {
+        $context = $this->createContext(uri: null, drush: null);
+
+        $this->assertFalse($context->isFreshInstall);
+    }
+
+    public function testIsFreshInstallCanBeSetToTrue(): void
+    {
+        $context = $this->createContext(uri: null, drush: null, isFreshInstall: true);
+
+        $this->assertTrue($context->isFreshInstall);
+    }
+
+    private function createContext(?string $uri, ?string $drush, bool $isFreshInstall = false): DeployContext
     {
         $envConfig = new EnvironmentConfig(
             id: 'test-env',
@@ -58,6 +72,7 @@ final class DeployContextTest extends TestCase
             envConfig: $envConfig,
             environment: $environment,
             output: new NullOutput(),
+            isFreshInstall: $isFreshInstall,
         );
     }
 }
