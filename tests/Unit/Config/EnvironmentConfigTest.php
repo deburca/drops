@@ -91,4 +91,31 @@ final class EnvironmentConfigTest extends TestCase
         $this->assertSame('site-a.example.com', $config->uri);
         $this->assertSame('site-a.example.com', $config->getSiteDir());
     }
+
+    public function testPrivateFilesIsNullByDefault(): void
+    {
+        $config = EnvironmentConfig::fromArray([
+            'id' => 'local',
+            'access' => ['type' => 'local'],
+            'paths' => ['webroot' => '/var/www/html'],
+        ]);
+
+        $this->assertNull($config->privateFiles);
+        $this->assertNull($config->getPrivateFilesPath());
+    }
+
+    public function testFromArrayWithPrivateFiles(): void
+    {
+        $config = EnvironmentConfig::fromArray([
+            'id' => 'production',
+            'access' => ['type' => 'ssh', 'host' => 'prod.example.com', 'user' => 'deploy'],
+            'paths' => [
+                'webroot' => '/var/www/drupal/web',
+                'private_files' => '/var/private-files/drupal',
+            ],
+        ]);
+
+        $this->assertSame('/var/private-files/drupal', $config->privateFiles);
+        $this->assertSame('/var/private-files/drupal', $config->getPrivateFilesPath());
+    }
 }

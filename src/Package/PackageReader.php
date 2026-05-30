@@ -68,6 +68,11 @@ final class PackageReader
         return $this->extractedDir . '/files';
     }
 
+    public function getPrivateFilesDir(): string
+    {
+        return $this->extractedDir . '/files-private';
+    }
+
     public function getHooksDir(): string
     {
         return $this->extractedDir . '/hooks';

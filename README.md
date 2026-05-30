@@ -103,6 +103,7 @@ paths:
   drush: /var/www/drupal/vendor/bin/drush
   php: /usr/bin/php8.2
   temp: /tmp/drops
+  private_files: /var/private-files/drupal   # Optional; Drupal's file_private_path
 
 env_vars:
   APP_ENV: production

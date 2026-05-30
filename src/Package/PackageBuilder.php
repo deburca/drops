@@ -36,6 +36,7 @@ final class PackageBuilder
         $this->filesystem->mkdir($this->packageDir . '/database');
         $this->filesystem->mkdir($this->packageDir . '/config');
         $this->filesystem->mkdir($this->packageDir . '/files');
+        $this->filesystem->mkdir($this->packageDir . '/files-private');
         $this->filesystem->mkdir($this->packageDir . '/hooks');
     }
 
@@ -57,6 +58,11 @@ final class PackageBuilder
     public function getFilesDir(): string
     {
         return $this->packageDir . '/files';
+    }
+
+    public function getPrivateFilesDir(): string
+    {
+        return $this->packageDir . '/files-private';
     }
 
     public function getHooksDir(): string

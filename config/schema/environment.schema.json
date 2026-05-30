@@ -72,6 +72,10 @@
                 "temp": {
                     "type": "string",
                     "description": "Temp directory for staging files"
+                },
+                "private_files": {
+                    "type": "string",
+                    "description": "Absolute path to the Drupal private file system (file_private_path)"
                 }
             }
         },
