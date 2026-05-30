@@ -31,8 +31,8 @@ final class FilesExportStep implements StepInterface
         }
 
         $config = $context->getStepConfig('files_export');
-        $directories = $config['directories'] ?? ['files/public'];
-        $excludes = $config['exclude'] ?? [];
+        $directories = $config['directories'] ?? ['files'];
+        $excludes = $config['exclude'] ?? ['styles', 'css', 'js', 'php'];
 
         $log = [];
         $webroot = $context->envConfig->webroot;
