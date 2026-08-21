@@ -56,6 +56,18 @@ final class DeployContext
     }
 
     /**
+     * Get the sites/ subdirectory name this deployment targets.
+     *
+     * Mirrors the URI precedence used by drushCommand(): the application-level
+     * URI overrides the environment-level one, since a single environment can
+     * host multiple multi-site applications each targeting a different site.
+     */
+    public function getSiteDir(): string
+    {
+        return $this->appConfig->uri ?? $this->envConfig->uri ?? 'default';
+    }
+
+    /**
      * Get step-specific configuration.
      *
      * @return array<string, mixed>

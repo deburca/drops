@@ -39,7 +39,7 @@ final class FilesExportStep implements StepInterface
         $targetDir = $context->packageBuilder->getFilesDir();
 
         foreach ($directories as $dir) {
-            $sourcePath = $webroot . '/sites/' . $context->envConfig->getSiteDir() . '/' . $dir;
+            $sourcePath = $webroot . '/sites/' . $context->getSiteDir() . '/' . $dir;
             $destPath = $targetDir . '/' . $dir;
 
             $result = $this->exportDirectory($context, $sourcePath, $destPath, $excludes);

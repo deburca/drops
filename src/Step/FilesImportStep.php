@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Drops\Step;
 
+use Drops\Package\PackageReader;
 use Drops\Pipeline\DeployContext;
 use Drops\Pipeline\StepResult;
 
@@ -26,7 +27,8 @@ final class FilesImportStep implements StepInterface
 
     public function run(DeployContext $context): StepResult
     {
-        if ($context->packageReader === null) {
+        $packageReader = $context->packageReader;
+        if ($packageReader === null) {
             return StepResult::failed('No package reader available');
         }
 
@@ -36,8 +38,55 @@ final class FilesImportStep implements StepInterface
 
         $log = [];
         $webroot = $context->envConfig->webroot;
-        $packageFilesDir = $context->packageReader->getFilesDir();
+        $packageFilesDir = $packageReader->getFilesDir();
 
+        // PackageReader extracts the package on the machine running DROPS,
+        // which is a different filesystem than the target environment for
+        // SSH deployments. Stage the package's files on the environment
+        // first so the rsync commands below (which run *on* the environment)
+        // can find them.
+        $stagingDir = rtrim($context->envConfig->getTempDir(), '/') . '/drops-files-import-' . date('YmdHis');
+        $stageResult = $context->environment->execute(sprintf('mkdir -p %s', escapeshellarg($stagingDir)));
+        if (!$stageResult->isSuccessful()) {
+            return StepResult::failed(
+                sprintf('Failed to create staging directory (exit code %d)', $stageResult->exitCode),
+                [$stageResult->getErrorOutput()],
+            );
+        }
+        $context->environment->upload($packageFilesDir, $stagingDir . '/files');
+        $packageFilesDir = $stagingDir . '/files';
+        $log[] = sprintf('Staged package files on target: %s', $packageFilesDir);
+
+        try {
+            return $this->doImport(
+                $context,
+                $packageReader,
+                $log,
+                $webroot,
+                $packageFilesDir,
+                $stagingDir,
+                $directories,
+                $deleteRemoved,
+            );
+        } finally {
+            $context->environment->execute(sprintf('rm -rf %s', escapeshellarg($stagingDir)));
+        }
+    }
+
+    /**
+     * @param string[] $log
+     * @param string[] $directories
+     */
+    private function doImport(
+        DeployContext $context,
+        PackageReader $packageReader,
+        array $log,
+        string $webroot,
+        string $packageFilesDir,
+        string $stagingDir,
+        array $directories,
+        bool $deleteRemoved,
+    ): StepResult {
         // Resolve the actual public files path from Drupal's settings.php
         // rather than guessing from the URI, since sites.php or custom
         // settings may place files in a non-default directory.
@@ -99,15 +148,23 @@ final class FilesImportStep implements StepInterface
             }
         }
 
-        // Import private files if the package contains them
-        $privateFilesDir = $context->packageReader->getPrivateFilesDir();
-        if (is_dir($privateFilesDir) && !$this->isEmptyDir($privateFilesDir)) {
+        // Import private files if the package contains them.
+        // NOTE: this check reads the package's original (local) extraction
+        // path — PackageReader always extracts on the machine running DROPS,
+        // regardless of target environment — purely to decide whether
+        // there's anything to stage; the actual transfer below uses the
+        // staged, environment-side copy.
+        $localPrivateFilesDir = $packageReader->getPrivateFilesDir();
+        if (is_dir($localPrivateFilesDir) && !$this->isEmptyDir($localPrivateFilesDir)) {
             $privateFilesPath = $context->envConfig->getPrivateFilesPath();
 
             if ($privateFilesPath === null) {
                 $log[] = 'WARNING: Package contains private files but target has no'
                     . ' paths.private_files configured — skipping';
             } else {
+                $context->environment->upload($localPrivateFilesDir, $stagingDir . '/files-private');
+                $privateFilesDir = $stagingDir . '/files-private';
+
                 // Ensure target directory exists
                 $mkdirCmd = sprintf('mkdir -p %s', escapeshellarg($privateFilesPath));
                 $mkdirResult = $context->environment->execute($mkdirCmd);
